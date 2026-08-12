@@ -24,6 +24,7 @@ Then open `http://127.0.0.1:4174/`.
 - Every worker levels itself up after each kilogram it personally mows, up to level 5. Each level adds 10% permanent movement speed and 10% cutting width, then triggers a glowing seven-second 1.75× speed burst.
 - The worker cycle includes weed-whacker workers: walking characters with animated legs and spinning trimmers who move more slowly but work closer to habitats and obstacles than riding mowers.
 - The worker cycle also produces helmeted chainsaw walkers. They seek mature trees, visibly run their saws, fell trees for score and personal progress, and leave saplings that begin regrowing after 16 seconds.
+- The worker cycle includes tree-trimmer bucket trucks with telescoping booms, raised safety buckets, and arborists. They seek mature trees, extend beside the crown, visibly prune it, earn forestry progress, and leave the reduced crown to regrow; chainsaw crews remain responsible for felling and timber.
 - Three articulated dragons begin above the terrain, flap and bank around the globe, chase riders, breathe layered fire with a hot core, sparks, and local firelight, and eat captured offspring. After three meals, a dragon hatches a smaller next-generation dragon that grows to full size; the brood has no population cap. Scorched riders visibly catch fire around the torso and head with flickering flames, embers, and rising smoke. If the founding rider is eaten, a replacement redeploys from a charging station after a short delay.
 - Touch: tap **AUTO** to toggle autopilot; hold **GO** and use the steering buttons to take over.
 - Camera: drag to orbit smoothly around the planet, pinch or scroll to change distance, and release to coast gently. On desktop, right- or middle-drag anchors the camera position while pivoting the view. Tap **◎** for a globe overview. **POV** enters the founding rider's first-person view; **CHASE** follows from behind and above. Both stay linked to the founder, allow drag/pinch camera control, switch directly between one another, and expose **RETURN** on the active view to restore the previous free-camera pose.
@@ -42,7 +43,7 @@ Then open `http://127.0.0.1:4174/`.
 - persistent cut cells and striped mowing trails;
 - mower acceleration, steering, reversing, battery drain, and charging;
 - colony reproduction, autonomous offspring, generations, hatch progress, and score;
-- extensible worker classes: riding mowers for broad coverage, weed-whacker walkers for close trimming, and chainsaw walkers for renewable forestry;
+- extensible worker classes: riding mowers, weed-whacker walkers, planters, chainsaw crews, tree-trimmer bucket trucks, and miners;
 - flying dragon predators, fire-breath attacks, mower losses, and founder redeployment;
 - collision penalties for trees, stones, water, and flowers;
 - touch controls, keyboard controls, synthesized mower audio, completion scoring;

@@ -207,6 +207,7 @@ let granaryGrainPile;
 let treeVisualsDirty = false;
 let treeVisualRefreshIn = 0;
 let treesCut = 0;
+let treesTrimmed = 0;
 let renderPixelRatio = MAX_DEVICE_PIXEL_RATIO;
 let performanceWindowTime = 0;
 let performanceWindowFrames = 0;
@@ -624,6 +625,7 @@ function resetLawn() {
     tree.nextGrowthAt = 0;
   }
   treesCut = 0;
+  treesTrimmed = 0;
   treeVisualsDirty = true;
   seed = (seed * 1664525 + 1013904223) >>> 0;
   generateLawn();
@@ -724,6 +726,8 @@ function grainCapacityKg(agent) {
       ? 0.35
       : agent.workerType === "chainsaw"
         ? 0
+        : agent.workerType === "bucket"
+          ? 0
         : 0.65;
   return baseCapacity * (1 + ((agent.level || 1) - 1) * 0.12) * (1 + villageSkills.machinery * 0.1);
 }
@@ -746,7 +750,7 @@ function isAtGranary(agent) {
 }
 
 function tryUnloadGrain(agent) {
-  if (["chainsaw", "miner"].includes(agent.workerType) || !isAtGranary(agent) || Math.abs(agent.speed) > 18 * SPEED_SCALE) return 0;
+  if (["chainsaw", "bucket", "miner"].includes(agent.workerType) || !isAtGranary(agent) || Math.abs(agent.speed) > 18 * SPEED_SCALE) return 0;
   const delivered = grainCargoKg(agent);
   if (delivered <= 0.001) {
     agent.returningToGranary = false;
@@ -1252,6 +1256,8 @@ function workerProposalAffinity(worker, proposal) {
   if (["mower", "tractor"].includes(worker.workerType) && ["housing", "smithy"].includes(proposal.key)) affinity += 2.2;
   if (worker.workerType === "chainsaw" && proposal.key === "forestry") affinity += 3.5;
   if (worker.workerType === "chainsaw" && proposal.key === "lumberyard") affinity += 4;
+  if (worker.workerType === "bucket" && proposal.key === "forestry") affinity += 4.2;
+  if (worker.workerType === "bucket" && proposal.key === "machinery") affinity += 3.2;
   if (worker.workerType === "miner" && ["smithy", "walls", "guardTower"].includes(proposal.key)) affinity += 4;
   if (worker.workerType === "trimmer" && proposal.key === "defense") affinity += 2.2;
   if (worker.workerType === "trimmer" && proposal.key === "guardTower") affinity += 2.8;
@@ -1642,7 +1648,7 @@ function getPlanterControls(agent, dt) {
     agent.retargetIn = 0.5;
   }
   if (!agent.target) {
-    const harvester = [mower, ...offspring].find((worker) => !["planter", "chainsaw"].includes(worker.workerType));
+    const harvester = [mower, ...offspring].find((worker) => !["planter", "chainsaw", "bucket", "miner"].includes(worker.workerType));
     if (!harvester) return { steer: 0.4, drive: 0.42 };
     const desired = Math.atan2(harvester.y - agent.y, worldDeltaX(harvester.x, agent.x));
     return { steer: Math.max(-1, Math.min(1, angleDifference(desired, agent.angle) * 1.6)), drive: 0.55 };
@@ -1756,6 +1762,7 @@ function getColonyControls(agent, dt) {
 
 function updateColonyAgent(agent, dt) {
   if (agent.workerType === "chainsaw") return updateChainsawAgent(agent, dt);
+  if (agent.workerType === "bucket") return updateBucketTruckAgent(agent, dt);
   if (agent.workerType === "miner") return updateMinerAgent(agent, dt);
   if (agent.workerType === "planter") return updatePlanterAgent(agent, dt);
   tryUnloadGrain(agent);
@@ -1876,6 +1883,92 @@ function updateChainsawAgent(agent, dt) {
   return 0;
 }
 
+function chooseTrimTreeTarget(agent) {
+  return obstacles.reduce((best, tree) => {
+    if (tree.id !== "tree" || tree.growth < 0.92) return best;
+    const distance = Math.hypot(worldDeltaX(tree.x, agent.x), tree.y - agent.y);
+    const claimed = offspring.some((other) => other !== agent && other.treeTarget === tree) ? 260 : 0;
+    const score = distance + claimed;
+    return !best || score < best.score ? { tree, score } : best;
+  }, null)?.tree || null;
+}
+
+function trimTree(agent, tree) {
+  if (!tree || tree.growth < 0.86) return;
+  tree.growthLevel = Math.max(1, Math.floor(TREE_GROW_LEVELS * 0.68));
+  tree.growth = tree.growthLevel / TREE_GROW_LEVELS;
+  tree.regrowAt = elapsed + 6;
+  tree.nextGrowthAt = tree.regrowAt;
+  treeVisualsDirty = true;
+  treesTrimmed += 1;
+  const reward = Math.ceil(TREE_REWARD_CELLS * 0.48 * (1 + villageSkills.forestry * 0.1));
+  agent.mowedCells += reward;
+  agent.reproductionProgress += reward;
+  agent.treeTarget = null;
+  agent.trimProgress = 0;
+  agent.trimming = false;
+  processWorkerLeveling(agent);
+  announceAttack(`Bucket truck ${agent.id} trimmed a tree crown`);
+}
+
+function updateBucketTruckAgent(agent, dt) {
+  let tree = agent.treeTarget;
+  if (!tree || tree.growth < 0.92) {
+    tree = chooseTrimTreeTarget(agent);
+    agent.treeTarget = tree;
+    agent.trimProgress = 0;
+  }
+
+  if (!tree) {
+    agent.trimming = false;
+    const controls = getColonyControls(agent, dt);
+    agent.angle += controls.steer * 1.55 * dt;
+    const patrolSpeed = 112 * SPEED_SCALE * controls.drive;
+    agent.speed += (patrolSpeed - agent.speed) * Math.min(1, dt * 2.3);
+    agent.x = wrapX(agent.x + Math.cos(agent.angle) * agent.speed * dt);
+    agent.y = Math.max(agent.clearance, Math.min(FIELD_H - agent.clearance, agent.y + Math.sin(agent.angle) * agent.speed * dt));
+    return 0;
+  }
+
+  const dx = worldDeltaX(tree.x, agent.x);
+  const dy = tree.y - agent.y;
+  const distance = Math.hypot(dx, dy);
+  const workingDistance = tree.r * Math.max(0.4, tree.growth) + agent.clearance + 15;
+  if (distance <= workingDistance) {
+    agent.speed *= Math.max(0, 1 - dt * 7);
+    agent.angle += angleDifference(Math.atan2(dy, dx), agent.angle) * Math.min(1, dt * 2.8);
+    agent.trimming = true;
+    agent.trimProgress = (agent.trimProgress || 0) + dt * (1 + ((agent.level || 1) - 1) * 0.1);
+    if (agent.trimProgress >= 3.4) trimTree(agent, tree);
+    return 0;
+  }
+
+  agent.trimming = false;
+  const desired = Math.atan2(dy, dx);
+  const difference = angleDifference(desired, agent.angle);
+  const levelSpeed = 145 * workerLevelSpeedMultiplier(agent) * SPEED_SCALE;
+  const targetSpeed = levelSpeed * (Math.abs(difference) > 1.8 ? 0.28 : 0.82);
+  agent.speed += (targetSpeed - agent.speed) * Math.min(1, dt * 2.4);
+  agent.angle += Math.max(-1, Math.min(1, difference * 1.5)) * 1.75 * dt;
+  const previousX = agent.x;
+  const previousY = agent.y;
+  agent.x = wrapX(agent.x + Math.cos(agent.angle) * agent.speed * dt);
+  agent.y += Math.sin(agent.angle) * agent.speed * dt;
+  const collision = insideObstacle(agent.x, agent.y, agent.clearance);
+  if ((collision && collision !== tree) || agent.y < agent.clearance || agent.y > FIELD_H - agent.clearance) {
+    agent.x = previousX;
+    agent.y = previousY;
+    agent.angle += agent.recoverySteer * 0.72;
+    agent.recoverySteer *= -1;
+    agent.speed *= -0.18;
+  } else if (collision === tree) {
+    agent.x = previousX;
+    agent.y = previousY;
+    agent.speed = 0;
+  }
+  return 0;
+}
+
 function chooseStoneTarget(agent) {
   return obstacles.reduce((best, stone) => {
     if (stone.id !== "stone" || (stone.quarriedUntil || 0) > elapsed) return best;
@@ -1955,9 +2048,9 @@ function updateMinerAgent(agent, dt) {
 function spawnOffspring(parent) {
   if (1 + offspring.length >= colonyCapacity() || !planetRoot) return null;
   const childId = nextMowerId++;
-  const workerSequence = ["planter", "trimmer", "chainsaw", "miner", "mower"];
+  const workerSequence = ["planter", "trimmer", "chainsaw", "bucket", "miner", "mower"];
   const workerType = workerSequence[(childId - 2) % workerSequence.length];
-  const clearance = ["trimmer", "planter"].includes(workerType) ? 12 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 14 / SURFACE_SCALE : MOWER_CLEARANCE;
+  const clearance = workerType === "bucket" ? 46 / SURFACE_SCALE : ["trimmer", "planter"].includes(workerType) ? 12 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 14 / SURFACE_SCALE : MOWER_CLEARANCE;
   let spawnX = parent.x;
   let spawnY = parent.y;
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -1978,8 +2071,8 @@ function spawnOffspring(parent) {
     generation: parent.generation + 1,
     level: 1,
     levelBoostUntil: 0,
-    baseDeckRadius: workerType === "trimmer" ? 34 / SURFACE_SCALE : workerType === "planter" ? 44 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 18 / SURFACE_SCALE : DECK_RADIUS,
-    deckRadius: workerType === "trimmer" ? 34 / SURFACE_SCALE : workerType === "planter" ? 44 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 18 / SURFACE_SCALE : DECK_RADIUS,
+    baseDeckRadius: workerType === "trimmer" ? 34 / SURFACE_SCALE : workerType === "planter" ? 44 / SURFACE_SCALE : workerType === "bucket" ? 38 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 18 / SURFACE_SCALE : DECK_RADIUS,
+    deckRadius: workerType === "trimmer" ? 34 / SURFACE_SCALE : workerType === "planter" ? 44 / SURFACE_SCALE : workerType === "bucket" ? 38 / SURFACE_SCALE : ["chainsaw", "miner"].includes(workerType) ? 18 / SURFACE_SCALE : DECK_RADIUS,
     clearance,
     x: spawnX,
     y: spawnY,
@@ -2001,6 +2094,8 @@ function spawnOffspring(parent) {
     treeTarget: null,
     sawProgress: 0,
     sawing: false,
+    trimProgress: 0,
+    trimming: false,
     stoneTarget: null,
     miningProgress: 0,
     mining: false,
@@ -2011,6 +2106,8 @@ function spawnOffspring(parent) {
         ? createPlanterModel(parent.generation + 1)
       : workerType === "chainsaw"
         ? createChainsawModel(parent.generation + 1)
+      : workerType === "bucket"
+        ? createBucketTruckModel(parent.generation + 1)
       : workerType === "miner"
         ? createMinerModel(parent.generation + 1)
       : createMowerModel(parent.generation + 1),
@@ -2024,6 +2121,8 @@ function spawnOffspring(parent) {
       ? `Planter ${child.id} joined · sowing four crop varieties`
     : workerType === "chainsaw"
       ? `Chainsaw ${child.id} joined · generation ${child.generation}`
+    : workerType === "bucket"
+      ? `Tree-trimmer truck ${child.id} joined · bucket boom ready`
     : workerType === "miner"
       ? `Miner ${child.id} joined · quarrying stronghold stone`
     : `Mower rider ${child.id} hatched · generation ${child.generation}`;
@@ -2058,6 +2157,8 @@ function processWorkerLeveling(agent) {
       ? `Weed-whacker ${agent.id}`
       : agent.workerType === "chainsaw"
         ? `Chainsaw ${agent.id}`
+      : agent.workerType === "bucket"
+        ? `Bucket truck ${agent.id}`
       : agent.workerType === "miner"
         ? `Miner ${agent.id}`
       : `Mower ${agent.id}`;
@@ -2619,7 +2720,7 @@ function liveScore() {
   const skillScore = Object.values(villageSkills).reduce((total, level) => total + level * 1750, 0);
   const treasuryScore = silverCoins * 25 + goldCoins * 3000;
   const strongholdScore = Object.values(stronghold).reduce((total, level) => total + level * 2400, 0) + timberStock * 120 + stoneStock * 180;
-  return Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + strongholdScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent));
+  return Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + strongholdScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + treesTrimmed * 180 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent));
 }
 
 function upgradeFounderToTractor() {
@@ -2793,7 +2894,7 @@ function finishJob() {
   const wallScore = villageWallLevel * 1900;
   const skillScore = Object.values(villageSkills).reduce((total, level) => total + level * 1750, 0);
   const treasuryScore = silverCoins * 25 + goldCoins * 3000;
-  const finalScore = Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent - elapsed * 2));
+  const finalScore = Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + treesTrimmed * 180 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent - elapsed * 2));
   ui.finishScore.textContent = `${finalScore.toLocaleString()} pts`;
   ui.finishDetail.textContent = `${formatTime(elapsed)} · castle ${castles.length} · walls level ${villageWallLevel} · ${goldCoins} gold · ${silverCoins} silver · cat ate ${creaturesEatenByCat} creatures`;
   ui.status.textContent = `Planet mastered · ${finalScore.toLocaleString()} points`;
@@ -3581,6 +3682,85 @@ function createChainsawModel(generation = 1) {
   group.userData.rightLeg = rightLeg;
   group.userData.sawGroup = sawGroup;
   group.userData.chain = chain;
+  return group;
+}
+
+function createBucketTruckModel(generation = 1) {
+  const group = new THREE.Group();
+  group.name = "tree-trimmer-bucket-truck";
+  const truckColor = new THREE.Color().setHSL((0.11 + generation * 0.027) % 1, 0.7, 0.56);
+  const dark = new THREE.MeshStandardMaterial({ color: 0x141a17, roughness: 0.84 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x87938d, roughness: 0.4, metalness: 0.58 });
+  const safety = new THREE.MeshStandardMaterial({ color: 0xf1a83a, roughness: 0.62, metalness: 0.08 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xb97957, roughness: 0.9 });
+
+  box(group, new THREE.Vector3(104, 25, 56), truckColor, new THREE.Vector3(-2, 25, 0), { roughness: 0.58, metalness: 0.15 });
+  box(group, new THREE.Vector3(43, 43, 54), truckColor, new THREE.Vector3(31, 52, 0), { roughness: 0.58, metalness: 0.15 });
+  box(group, new THREE.Vector3(4, 25, 44), 0x8eb8b1, new THREE.Vector3(53, 57, 0), { roughness: 0.24, metalness: 0.12 });
+  box(group, new THREE.Vector3(47, 7, 58), 0x202b27, new THREE.Vector3(-31, 43, 0));
+  box(group, new THREE.Vector3(32, 9, 50), 0xb9c2bd, new THREE.Vector3(-31, 50, 0), { roughness: 0.42, metalness: 0.42 });
+
+  const wheelGeometry = new THREE.CylinderGeometry(15, 15, 10, 14);
+  for (const x of [-34, 34]) {
+    for (const z of [-34, 34]) {
+      const wheel = new THREE.Mesh(wheelGeometry, dark);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(x, 14, z);
+      wheel.castShadow = true;
+      group.add(wheel);
+    }
+  }
+
+  const boomPivot = new THREE.Group();
+  boomPivot.position.set(-42, 54, 0);
+  const pivotDrum = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 20, 14), steel);
+  pivotDrum.rotation.x = Math.PI / 2;
+  boomPivot.add(pivotDrum);
+  box(boomPivot, new THREE.Vector3(72, 10, 12), 0xf1a83a, new THREE.Vector3(36, 0, 0), { roughness: 0.62, metalness: 0.08 });
+
+  const boomExtension = new THREE.Group();
+  boomExtension.position.set(45, 0, 0);
+  box(boomExtension, new THREE.Vector3(58, 7, 9), 0xd9dfdb, new THREE.Vector3(29, 0, 0), { roughness: 0.42, metalness: 0.45 });
+  const bucket = new THREE.Group();
+  bucket.position.set(61, 0, 0);
+  box(bucket, new THREE.Vector3(28, 8, 30), 0xf1a83a, new THREE.Vector3(0, -2, 0), { roughness: 0.62, metalness: 0.08 });
+  for (const z of [-13, 13]) {
+    box(bucket, new THREE.Vector3(4, 29, 4), 0xf1a83a, new THREE.Vector3(-11, 12, z), { roughness: 0.62, metalness: 0.08 });
+    box(bucket, new THREE.Vector3(4, 29, 4), 0xf1a83a, new THREE.Vector3(11, 12, z), { roughness: 0.62, metalness: 0.08 });
+  }
+  box(bucket, new THREE.Vector3(27, 4, 4), 0xf1a83a, new THREE.Vector3(0, 26, -13), { roughness: 0.62, metalness: 0.08 });
+  box(bucket, new THREE.Vector3(27, 4, 4), 0xf1a83a, new THREE.Vector3(0, 26, 13), { roughness: 0.62, metalness: 0.08 });
+
+  box(bucket, new THREE.Vector3(16, 24, 20), 0x527a68, new THREE.Vector3(0, 18, 0));
+  const workerHead = new THREE.Mesh(new THREE.SphereGeometry(7.5, 14, 10), skin);
+  workerHead.position.set(2, 36, 0);
+  bucket.add(workerHead);
+  const workerHelmet = new THREE.Mesh(new THREE.SphereGeometry(8.3, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.55), safety);
+  workerHelmet.position.set(2, 39, 0);
+  bucket.add(workerHelmet);
+  const pruningSaw = new THREE.Group();
+  pruningSaw.position.set(14, 24, -14);
+  box(pruningSaw, new THREE.Vector3(31, 4, 4), 0x87938d, new THREE.Vector3(15, 0, 0), { roughness: 0.4, metalness: 0.58 });
+  const cutter = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 2.5, 14), steel);
+  cutter.rotation.x = Math.PI / 2;
+  cutter.position.set(31, 0, 0);
+  pruningSaw.add(cutter);
+  bucket.add(pruningSaw);
+
+  boomExtension.add(bucket);
+  boomPivot.add(boomExtension);
+  group.add(boomPivot);
+
+  const burnEffect = createRiderBurnEffect();
+  burnEffect.position.set(-15, -5, 0);
+  group.add(burnEffect);
+  group.userData.burnEffect = burnEffect;
+  group.userData.workerType = "bucket";
+  group.userData.boomPivot = boomPivot;
+  group.userData.boomExtension = boomExtension;
+  group.userData.bucket = bucket;
+  group.userData.pruningCutter = cutter;
+  group.userData.boomDeploy = 0;
   return group;
 }
 
@@ -4473,7 +4653,7 @@ function updateBoostEffect(agent, model) {
 function updateLevelAura(agent, model) {
   let aura = model.userData.levelAura;
   if (!aura) {
-    const radius = model.userData.workerType === "tractor" ? 84 : ["trimmer", "chainsaw", "planter", "miner"].includes(model.userData.workerType) ? 30 : 43;
+    const radius = model.userData.workerType === "tractor" ? 84 : model.userData.workerType === "bucket" ? 64 : ["trimmer", "chainsaw", "planter", "miner"].includes(model.userData.workerType) ? 30 : 43;
     aura = new THREE.Mesh(
       new THREE.TorusGeometry(radius, 2.2, 8, 40),
       new THREE.MeshBasicMaterial({ color: 0x9cc7b0, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false }),
@@ -4494,7 +4674,7 @@ function updateLevelAura(agent, model) {
 }
 
 function updateGrainLoadVisual(agent, model) {
-  if (["chainsaw", "planter", "miner"].includes(agent.workerType)) return;
+  if (["chainsaw", "bucket", "planter", "miner"].includes(agent.workerType)) return;
   let load = model.userData.grainLoad;
   if (!load) {
     load = new THREE.Group();
@@ -4561,6 +4741,17 @@ function positionMowerModel(agent, model) {
       model.userData.pickaxe.rotation.z = agent.mining ? -0.55 + Math.sin(elapsed * 13 + agent.id) * 0.75 : -0.12;
     }
     model.position.addScaledVector(frame.normal, Math.abs(Math.sin(elapsed * 10.5 + agent.id)) * 2.2 * pace);
+  }
+  if (model.userData.workerType === "bucket") {
+    const targetDeploy = agent.trimming ? 1 : 0;
+    model.userData.boomDeploy += (targetDeploy - model.userData.boomDeploy) * Math.min(1, 2.2 / 60 + Math.abs(targetDeploy - model.userData.boomDeploy) * 0.08);
+    const deploy = THREE.MathUtils.smoothstep(model.userData.boomDeploy, 0, 1);
+    const boomAngle = THREE.MathUtils.lerp(0.08, 0.72, deploy);
+    model.userData.boomPivot.rotation.z = boomAngle;
+    model.userData.boomExtension.position.x = THREE.MathUtils.lerp(45, 62, deploy);
+    model.userData.bucket.rotation.z = -boomAngle;
+    model.userData.bucket.position.y = Math.sin(elapsed * 4.2 + agent.id) * deploy * 1.8;
+    model.userData.pruningCutter.rotation.y = agent.trimming ? elapsed * 34 : 0;
   }
   updateRiderBurnEffect(agent, model);
   updateBoostEffect(agent, model);
