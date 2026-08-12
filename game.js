@@ -25,6 +25,7 @@ const ui = {
   planetGlobe: document.querySelector("#planet-globe"),
   granaryDot: document.querySelector("#granary-dot"),
   planetDot: document.querySelector("#planet-dot"),
+  barbarianDot: document.querySelector("#barbarian-dot"),
   cameraDot: document.querySelector("#camera-dot"),
   zoomGlobe: document.querySelector("#zoom-globe"),
   surfaceView: document.querySelector("#surface-view"),
@@ -133,6 +134,32 @@ function wrapRaw(value, maximum) {
 relocateChargePadsToLand();
 const granary = { x: chargePads[0].x, y: chargePads[0].y };
 
+function findBarbarianVillageSite() {
+  const antipodeX = wrapRaw(granary.x + FIELD_W / 2, FIELD_W);
+  const antipodeY = FIELD_H - granary.y;
+  for (let radius = 0; radius <= 1200; radius += 60) {
+    for (let step = 0; step < 40; step += 1) {
+      const angle = (step / 40) * Math.PI * 2;
+      const x = wrapRaw(antipodeX + Math.cos(angle) * radius, FIELD_W);
+      const y = Math.max(150, Math.min(FIELD_H - 150, antipodeY + Math.sin(angle) * radius));
+      const center = scientificWorld.sample(x, y);
+      if (center.water || center.relief > 0.78) continue;
+      let dry = true;
+      for (let ring = 0; ring < 12; ring += 1) {
+        const ringAngle = (ring / 12) * Math.PI * 2;
+        if (scientificWorld.sample(wrapRaw(x + Math.cos(ringAngle) * 58, FIELD_W), y + Math.sin(ringAngle) * 58).water) {
+          dry = false;
+          break;
+        }
+      }
+      if (dry) return { x, y };
+    }
+  }
+  return { x: antipodeX, y: antipodeY };
+}
+
+const barbarianSite = findBarbarianVillageSite();
+
 function planetNoise(index, salt = 0) {
   let value = Math.imul(index + 41 + salt * 101, 2654435761);
   value = Math.imul(value ^ (value >>> 15), 2246822519);
@@ -146,6 +173,7 @@ function createPlanetObstacles() {
     const y = 110 + planetNoise(index, 2) * (FIELD_H - 220);
     if (scientificWorld.sample(x, y).water) continue;
     if (chargePads.some((pad) => Math.hypot(x - pad.x, y - pad.y) < 190 / SURFACE_SCALE)) continue;
+    if (Math.hypot(worldDeltaX(x, barbarianSite.x), y - barbarianSite.y) < 95) continue;
     const choice = planetNoise(index, 3);
     if (choice < 0.14) {
       result.push({ kind: "ellipse", id: "pond", x, y, rx: (85 + planetNoise(index, 4) * 85) / SURFACE_SCALE, ry: (55 + planetNoise(index, 5) * 55) / SURFACE_SCALE });
@@ -161,6 +189,7 @@ function createPlanetObstacles() {
 }
 
 const obstacles = createPlanetObstacles();
+obstacles.push({ kind: "circle", id: "barbarian-village", x: barbarianSite.x, y: barbarianSite.y, r: 48 });
 
 const lawnLayer = document.createElement("canvas");
 const lawnCtx = lawnLayer.getContext("2d");
@@ -258,6 +287,7 @@ const mower = {
   grainCargoCells: 0,
   returningToGranary: false,
   burningUntil: 0,
+  arrowStaggerUntil: 0,
   disabledUntil: 0,
   protectedUntil: 18,
   boostFuel: 100,
@@ -298,6 +328,9 @@ let stoneStock = 0;
 const stronghold = { housing: 0, mill: 0, smithy: 0, lumberyard: 0, guardTower: 0 };
 let strongholdModel = null;
 const strongholdMillWheels = [];
+let barbarianVillage = null;
+const barbarianArrows = [];
+let barbarianArrowHits = 0;
 
 const cameraSpin = { yaw: 0, pitch: 0 };
 
@@ -614,6 +647,16 @@ function clearRocs() {
   dragonsTakenByRocs = 0;
 }
 
+function resetBarbarianVillage() {
+  for (const arrow of barbarianArrows) arrow.model?.removeFromParent();
+  barbarianArrows.length = 0;
+  barbarianArrowHits = 0;
+  for (const [index, bowman] of (barbarianVillage?.bowmen || []).entries()) {
+    bowman.nextShot = 16 + index * 0.45;
+    bowman.draw = 0;
+  }
+}
+
 function resetLawn() {
   if (surfaceView) leaveSurfaceView();
   clearOffspring();
@@ -643,6 +686,7 @@ function resetLawn() {
   mower.grainCargoCells = 0;
   mower.returningToGranary = false;
   mower.burningUntil = 0;
+  mower.arrowStaggerUntil = 0;
   mower.disabledUntil = 0;
   mower.protectedUntil = 18;
   mower.boostFuel = 100;
@@ -676,6 +720,7 @@ function resetLawn() {
   autoCharging = false;
   autoRecovery = 0;
   resetDragons();
+  resetBarbarianVillage();
   ui.finishModal.classList.remove("modal--open");
   running = true;
   updateUI();
@@ -1675,7 +1720,7 @@ function getPlanterControls(agent, dt) {
 
 function updatePlanterAgent(agent, dt) {
   const controls = getPlanterControls(agent, dt);
-  const fireSlow = agent.burningUntil > elapsed ? 0.46 : 1;
+  const fireSlow = (agent.burningUntil > elapsed ? 0.46 : 1) * (agent.arrowStaggerUntil > elapsed ? 0.42 : 1);
   const workerSpeed = 145 * workerLevelSpeedMultiplier(agent);
   const targetSpeed = controls.drive >= 0
     ? workerSpeed * SPEED_SCALE * controls.drive * fireSlow
@@ -2084,6 +2129,7 @@ function spawnOffspring(parent) {
     grainCargoCells: 0,
     returningToGranary: false,
     burningUntil: 0,
+    arrowStaggerUntil: 0,
     disabledUntil: 0,
     protectedUntil: elapsed + 12,
     target: null,
@@ -2316,6 +2362,104 @@ function igniteMower(agent, dragon) {
   }
   const workerLabel = agent === mower ? "founder" : agent.workerType;
   announceAttack(`Dragon ${dragon.id} set ${workerLabel} ${agent.id} on fire`);
+}
+
+function modelForWorker(agent) {
+  return agent === mower ? mowerModel : agent?.model;
+}
+
+function chooseBarbarianTarget() {
+  return availablePrey().reduce((best, agent) => {
+    const distance = Math.hypot(worldDeltaX(agent.x, barbarianSite.x), agent.y - barbarianSite.y);
+    if (distance > 235) return best;
+    return !best || distance < best.distance ? { agent, distance } : best;
+  }, null)?.agent || null;
+}
+
+function shootBarbarianArrow(bowman, target) {
+  if (!planetRoot || !bowman?.model || !target) return;
+  barbarianVillage.model.updateWorldMatrix(true, true);
+  const targetModel = modelForWorker(target);
+  targetModel?.updateWorldMatrix(true, false);
+  const startWorld = bowman.model.localToWorld(new THREE.Vector3(20, 43, 0));
+  const endWorld = targetModel
+    ? targetModel.localToWorld(new THREE.Vector3(0, 38, 0))
+    : planetFrame(target.x, target.y).normal.multiplyScalar(PLANET_RADIUS + terrainHeightAt(target.x, target.y) + 35);
+  const start = planetRoot.worldToLocal(startWorld.clone());
+  const end = planetRoot.worldToLocal(endWorld.clone());
+  const model = createBarbarianArrowModel();
+  model.position.copy(start);
+  planetRoot.add(model);
+  barbarianArrows.push({
+    model,
+    start,
+    end,
+    target,
+    progress: 0,
+    duration: THREE.MathUtils.clamp(start.distanceTo(end) / 720, 0.72, 1.28),
+    previous: start.clone(),
+  });
+  bowman.draw = 1;
+  bowman.targetId = target.id;
+}
+
+function hitWorkerWithArrow(agent) {
+  if (!agent || agent.disabledUntil > elapsed || agent.protectedUntil > elapsed) return;
+  const protection = Math.min(0.68, stronghold.guardTower * 0.055 + villageSkills.defense * 0.05);
+  agent.speed *= 0.28;
+  agent.arrowStaggerUntil = elapsed + 1.1 * (1 - protection);
+  if (agent === mower) {
+    mower.battery = Math.max(0, mower.battery - 6.5 * (1 - protection));
+    damage += 1.2 * (1 - protection);
+  } else {
+    agent.target = null;
+    agent.recovery = Math.max(agent.recovery || 0, 0.75);
+  }
+  barbarianArrowHits += 1;
+  const label = agent === mower ? "founder" : `${agent.workerType} ${agent.id}`;
+  announceAttack(`Barbarian bowmen struck ${label} · ${barbarianArrowHits} arrow hits`);
+}
+
+function updateBarbarianVillage(dt) {
+  if (!barbarianVillage) return;
+  const target = chooseBarbarianTarget();
+  barbarianVillage.bowmen.forEach((bowman, index) => {
+    bowman.draw += (0 - bowman.draw) * Math.min(1, dt * 4.2);
+    if (!target) {
+      bowman.nextShot = Math.max(bowman.nextShot, elapsed + 0.35 + index * 0.13);
+      bowman.targetId = null;
+      return;
+    }
+    if (elapsed < bowman.nextShot) return;
+    shootBarbarianArrow(bowman, target);
+    bowman.nextShot = elapsed + 3.1 + index * 0.11 + planetNoise(index + Math.floor(elapsed), 88) * 0.9;
+  });
+
+  for (let index = barbarianArrows.length - 1; index >= 0; index -= 1) {
+    const arrow = barbarianArrows[index];
+    arrow.progress += dt / arrow.duration;
+    const amount = Math.min(1, arrow.progress);
+    const movingTargetModel = modelForWorker(arrow.target);
+    if (movingTargetModel && amount < 0.88) {
+      const targetWorld = movingTargetModel.getWorldPosition(new THREE.Vector3());
+      arrow.end.lerp(planetRoot.worldToLocal(targetWorld), Math.min(1, dt * 4));
+    }
+    const middle = arrow.start.clone().add(arrow.end).multiplyScalar(0.5);
+    const surfaceRadius = (arrow.start.length() + arrow.end.length()) * 0.5 + 105;
+    middle.normalize().multiplyScalar(surfaceRadius);
+    const inverse = 1 - amount;
+    const position = arrow.start.clone().multiplyScalar(inverse * inverse)
+      .addScaledVector(middle, 2 * inverse * amount)
+      .addScaledVector(arrow.end, amount * amount);
+    const direction = position.clone().sub(arrow.previous).normalize();
+    if (direction.lengthSq() > 0.001) arrow.model.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    arrow.model.position.copy(position);
+    arrow.previous.copy(position);
+    if (amount < 1) continue;
+    hitWorkerWithArrow(arrow.target);
+    arrow.model.removeFromParent();
+    barbarianArrows.splice(index, 1);
+  }
 }
 
 function removeOffspring(child) {
@@ -2788,7 +2932,7 @@ function update(dt) {
   }
 
   const reserveMode = mower.battery <= 0;
-  const fireSlow = mower.burningUntil > elapsed ? 0.42 : 1;
+  const fireSlow = (mower.burningUntil > elapsed ? 0.42 : 1) * (mower.arrowStaggerUntil > elapsed ? 0.42 : 1);
   mower.boosting = !founderDisabled && drive > 0 && boostHeld && mower.boostFuel > 0;
   const boostMultiplier = mower.boosting
     ? (mower.workerType === "tractor" ? 1.62 : 1.9)
@@ -2844,6 +2988,7 @@ function update(dt) {
   updateDragons(dt);
   updateRocs(dt);
   updateApexCat(dt);
+  updateBarbarianVillage(dt);
   processReproduction();
   processVillageCouncil();
   if (newlyCut > 0) lawnTextureDirty = true;
@@ -2925,6 +3070,8 @@ function updateUI() {
   ui.planetDot.style.top = `${8 + (mower.y / FIELD_H) * 84}%`;
   ui.granaryDot.style.left = `${8 + (granary.x / FIELD_W) * 84}%`;
   ui.granaryDot.style.top = `${8 + (granary.y / FIELD_H) * 84}%`;
+  ui.barbarianDot.style.left = `${8 + (barbarianSite.x / FIELD_W) * 84}%`;
+  ui.barbarianDot.style.top = `${8 + (barbarianSite.y / FIELD_H) * 84}%`;
   if (granaryGrainPile) {
     const pileScale = Math.min(1.8, 0.35 + Math.sqrt(grainStoredKg) * 0.18);
     granaryGrainPile.visible = grainStoredKg > 0.01;
@@ -2948,7 +3095,7 @@ function updateUI() {
   ui.generation.textContent = `Walls ${villageWallLevel}`;
   ui.level.textContent = `Lv ${mower.level || 1}`;
   ui.score.textContent = scoreNow.toLocaleString();
-  ui.threat.textContent = `${dragons.length} dragons · cat`;
+  ui.threat.textContent = `${dragons.length} dragons · cat · ${barbarianVillage?.bowmen.length || 8} bowmen`;
   const trees = obstacles.filter((shape) => shape.id === "tree");
   const youngestTreeLevel = trees.reduce((youngest, tree) => Math.min(youngest, tree.growthLevel ?? TREE_GROW_LEVELS), TREE_GROW_LEVELS);
   ui.councilStatus.textContent = lastCouncilResult;
@@ -3764,6 +3911,190 @@ function createBucketTruckModel(generation = 1) {
   return group;
 }
 
+function createBarbarianBowmanModel(index = 0) {
+  const group = new THREE.Group();
+  group.name = `barbarian-bowman-${index + 1}`;
+  const hide = new THREE.MeshStandardMaterial({ color: index % 2 ? 0x6b3526 : 0x75422c, roughness: 0.96 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xa85f3d, roughness: 0.92 });
+  const fur = new THREE.MeshStandardMaterial({ color: 0x33251d, roughness: 0.98 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x9a6536, roughness: 0.88 });
+  const iron = new THREE.MeshStandardMaterial({ color: 0x7f8781, roughness: 0.38, metalness: 0.55 });
+
+  box(group, new THREE.Vector3(17, 30, 20), index % 2 ? 0x6b3526 : 0x75422c, new THREE.Vector3(0, 33, 0));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(8.5, 12, 9), skin);
+  head.position.set(1, 57, 0);
+  head.castShadow = true;
+  group.add(head);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(9.2, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.55), fur);
+  hair.position.set(0, 61, 0);
+  group.add(hair);
+  for (const side of [-1, 1]) {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(3, 13, 7), iron);
+    horn.position.set(0, 64, side * 9);
+    horn.rotation.x = side * 0.55;
+    group.add(horn);
+  }
+  limb(group, new THREE.Vector3(0, 46, -8), new THREE.Vector3(15, 37, -14), 3.2, hide);
+  const drawArm = limb(group, new THREE.Vector3(0, 46, 8), new THREE.Vector3(10, 42, 17), 3.2, hide);
+  drawArm.userData.restQuaternion = drawArm.quaternion.clone();
+  limb(group, new THREE.Vector3(-4, 19, -6), new THREE.Vector3(-3, 3, -7), 4, hide);
+  limb(group, new THREE.Vector3(5, 19, 6), new THREE.Vector3(6, 3, 7), 4, hide);
+
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(18, 1.8, 6, 22, Math.PI * 1.2), wood);
+  bow.position.set(18, 39, -16);
+  bow.rotation.x = Math.PI / 2;
+  bow.rotation.z = -Math.PI * 0.6;
+  group.add(bow);
+  const bowString = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(18, 22, -16), new THREE.Vector3(10, 39, 17), new THREE.Vector3(18, 56, -16)]),
+    new THREE.LineBasicMaterial({ color: 0xd8c49b }),
+  );
+  group.add(bowString);
+  const nockedArrow = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 37, 6), iron);
+  nockedArrow.position.set(21, 40, 0);
+  nockedArrow.rotation.z = Math.PI / 2;
+  group.add(nockedArrow);
+  group.userData.drawArm = drawArm;
+  group.userData.bow = bow;
+  return group;
+}
+
+function createBarbarianVillage() {
+  if (!planetRoot || barbarianVillage) return barbarianVillage;
+  const group = new THREE.Group();
+  group.name = "antipodal-barbarian-village";
+  const frame = planetFrame(barbarianSite.x, barbarianSite.y);
+  group.position.copy(frame.normal).multiplyScalar(PLANET_RADIUS + terrainHeightAt(barbarianSite.x, barbarianSite.y) + 3);
+  group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    frame.east,
+    frame.normal,
+    frame.east.clone().cross(frame.normal).normalize(),
+  ));
+
+  const timber = new THREE.MeshStandardMaterial({ color: 0x51321f, roughness: 0.97 });
+  const darkTimber = new THREE.MeshStandardMaterial({ color: 0x291b14, roughness: 0.98 });
+  const hide = new THREE.MeshStandardMaterial({ color: 0x7e3d29, roughness: 0.94 });
+  const bone = new THREE.MeshStandardMaterial({ color: 0xd2c49e, roughness: 0.88 });
+  const bowmen = [];
+  const fireFlames = [];
+
+  const ground = new THREE.Mesh(new THREE.CylinderGeometry(225, 235, 7, 32), new THREE.MeshStandardMaterial({ color: 0x493522, roughness: 1 }));
+  ground.position.y = 1;
+  ground.receiveShadow = true;
+  group.add(ground);
+
+  const palisadeRadius = 205;
+  for (let index = 0; index < 34; index += 1) {
+    const angle = (index / 34) * Math.PI * 2;
+    if (Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) < 0.2) continue;
+    const height = 64 + (index % 3) * 7;
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(8, 10, height, 7), timber);
+    log.position.set(Math.cos(angle) * palisadeRadius, height / 2, Math.sin(angle) * palisadeRadius);
+    log.rotation.y = angle;
+    log.castShadow = true;
+    group.add(log);
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(9, 20, 7), timber);
+    spike.position.set(log.position.x, height + 8, log.position.z);
+    group.add(spike);
+  }
+  for (const side of [-1, 1]) {
+    box(group, new THREE.Vector3(17, 100, 17), 0x51321f, new THREE.Vector3(194, 50, side * 34));
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(9, 9, 7), bone);
+    skull.position.set(194, 106, side * 34);
+    group.add(skull);
+  }
+
+  for (let index = 0; index < 5; index += 1) {
+    const angle = 0.55 + index * 1.18;
+    const radius = index === 0 ? 38 : 105 + (index % 2) * 18;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    const hut = new THREE.Group();
+    hut.position.set(x, 0, z);
+    hut.rotation.y = -angle;
+    const walls = new THREE.Mesh(new THREE.CylinderGeometry(30, 36, 42, 9), darkTimber);
+    walls.position.y = 22;
+    walls.castShadow = true;
+    hut.add(walls);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(43, 39, 9), hide);
+    roof.position.y = 60;
+    roof.castShadow = true;
+    hut.add(roof);
+    box(hut, new THREE.Vector3(5, 30, 22), 0x140e0a, new THREE.Vector3(31, 18, 0));
+    group.add(hut);
+  }
+
+  for (let index = 0; index < 4; index += 1) {
+    const angle = Math.PI * 0.25 + index * Math.PI * 0.5;
+    const x = Math.cos(angle) * 155;
+    const z = Math.sin(angle) * 155;
+    const towerHeight = 96;
+    for (const ox of [-19, 19]) for (const oz of [-19, 19]) {
+      box(group, new THREE.Vector3(9, towerHeight, 9), 0x51321f, new THREE.Vector3(x + ox, towerHeight / 2, z + oz));
+    }
+    box(group, new THREE.Vector3(54, 8, 54), 0x291b14, new THREE.Vector3(x, towerHeight, z));
+    const bowmanModel = createBarbarianBowmanModel(index);
+    bowmanModel.position.set(x, towerHeight + 4, z);
+    bowmanModel.rotation.y = -angle;
+    group.add(bowmanModel);
+    bowmen.push({ model: bowmanModel, nextShot: 16 + index * 0.55, draw: 0, targetId: null });
+  }
+  for (let index = 0; index < 4; index += 1) {
+    const angle = index * Math.PI * 0.5;
+    const bowmanModel = createBarbarianBowmanModel(index + 4);
+    bowmanModel.scale.setScalar(0.92);
+    bowmanModel.position.set(Math.cos(angle) * 178, 70, Math.sin(angle) * 178);
+    bowmanModel.rotation.y = -angle;
+    group.add(bowmanModel);
+    bowmen.push({ model: bowmanModel, nextShot: 18.2 + index * 0.55, draw: 0, targetId: null });
+  }
+
+  const fireBase = new THREE.Mesh(new THREE.TorusGeometry(25, 6, 8, 18), new THREE.MeshStandardMaterial({ color: 0x37332e, roughness: 0.82 }));
+  fireBase.rotation.x = Math.PI / 2;
+  fireBase.position.y = 8;
+  group.add(fireBase);
+  for (let index = 0; index < 3; index += 1) {
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(9 - index * 1.8, 34 - index * 5, 8),
+      new THREE.MeshBasicMaterial({ color: [0xff5824, 0xffa52e, 0xffe08a][index], transparent: true, opacity: 0.82 }),
+    );
+    flame.position.set((index - 1) * 4, 25 - index * 2, (index % 2) * 4);
+    group.add(flame);
+    fireFlames.push(flame);
+  }
+  const fireLight = new THREE.PointLight(0xff6a28, MOBILE_RENDERING ? 1.2 : 2.3, 460, 2);
+  fireLight.position.set(0, 55, 0);
+  group.add(fireLight);
+
+  const bannerPole = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 145, 8), darkTimber);
+  bannerPole.position.set(-55, 75, -15);
+  group.add(bannerPole);
+  const banner = new THREE.Mesh(new THREE.PlaneGeometry(58, 42), new THREE.MeshStandardMaterial({ color: 0x8f2f22, side: THREE.DoubleSide, roughness: 0.88 }));
+  banner.position.set(-25, 115, -14);
+  banner.rotation.y = Math.PI / 2;
+  group.add(banner);
+
+  planetRoot.add(group);
+  barbarianVillage = { x: barbarianSite.x, y: barbarianSite.y, model: group, bowmen, fireFlames, fireLight };
+  return barbarianVillage;
+}
+
+function createBarbarianArrowModel() {
+  const group = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 46, 7), new THREE.MeshStandardMaterial({ color: 0xe0bd78, emissive: 0x3a2108, emissiveIntensity: 0.16, roughness: 0.72 }));
+  group.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(5, 13, 7), new THREE.MeshStandardMaterial({ color: 0xcbd1cd, roughness: 0.28, metalness: 0.68 }));
+  head.position.y = 29;
+  group.add(head);
+  for (const side of [-1, 1]) {
+    const feather = new THREE.Mesh(new THREE.PlaneGeometry(13, 9), new THREE.MeshBasicMaterial({ color: 0xe04c35, side: THREE.DoubleSide }));
+    feather.position.set(side * 3, -22, 0);
+    feather.rotation.y = side * 0.5;
+    group.add(feather);
+  }
+  return group;
+}
+
 function createMinerModel(generation = 1) {
   const group = new THREE.Group();
   group.name = "stone-miner";
@@ -4407,6 +4738,7 @@ function init3D() {
   sun.target = sunTarget;
 
   addWorldScenery();
+  createBarbarianVillage();
   const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(PLANET_RADIUS + TERRAIN_AMPLITUDE + 18, MOBILE_RENDERING ? 64 : 128, MOBILE_RENDERING ? 40 : 80),
     new THREE.ShaderMaterial({
@@ -4926,6 +5258,22 @@ function draw(dt) {
   for (const roc of rocs) positionRocModel(roc);
   positionApexCatModel();
   for (const wheel of strongholdMillWheels) wheel.rotation.z = elapsed * 0.65;
+  if (barbarianVillage) {
+    const villageNormal = planetFrame(barbarianSite.x, barbarianSite.y).normal;
+    barbarianVillage.model.visible = villageNormal.dot(cameraNormalScratch) > -0.28;
+    if (barbarianVillage.model.visible) {
+      for (const [index, bowman] of barbarianVillage.bowmen.entries()) {
+        const pulse = bowman.draw * (0.72 + Math.sin(elapsed * 18 + index) * 0.1);
+        bowman.model.userData.drawArm.quaternion.copy(bowman.model.userData.drawArm.userData.restQuaternion);
+        bowman.model.userData.drawArm.rotateZ(-pulse * 0.58);
+        bowman.model.userData.bow.rotation.y = Math.sin(elapsed * 1.7 + index) * 0.05 + pulse * 0.12;
+      }
+      for (const [index, flame] of barbarianVillage.fireFlames.entries()) {
+        flame.scale.set(0.85 + Math.sin(elapsed * 12 + index) * 0.15, 0.88 + Math.sin(elapsed * 15 + index * 2) * 0.22, 0.85 + Math.cos(elapsed * 11 + index) * 0.14);
+      }
+      barbarianVillage.fireLight.intensity = (MOBILE_RENDERING ? 1.2 : 2.3) * (0.78 + Math.sin(elapsed * 14) * 0.18);
+    }
+  }
 
   const altitude = Math.max(0, camera.position.length() - PLANET_RADIUS);
   const globeBlend = Math.max(0, Math.min(1, (altitude - 450) / (PLANET_RADIUS * 1.35)));

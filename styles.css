@@ -327,6 +327,16 @@ button { font: inherit; }
   transform: translate(-50%, -50%);
 }
 
+#barbarian-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #f1b089;
+  background: #8f2f22;
+  box-shadow: 0 0 0 3px rgba(143, 47, 34, 0.2), 0 0 8px rgba(232, 92, 52, 0.72);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
 .castle-dot {
   position: absolute;
   z-index: 1;
