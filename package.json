@@ -1,5 +1,5 @@
 {
-  "name": "wildworld",
+  "name": "mow-the-planet",
   "version": "1.0.0",
   "description": "A touch-first living-planet simulation.",
   "main": "game.js",

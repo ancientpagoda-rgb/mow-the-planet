@@ -1,4 +1,4 @@
-# Wildworld
+# Mow the Planet
 
 A touch-first living-planet simulation built with Three.js, where a farming village grows among dragons, rocs, and one impossible cat.
 
