@@ -26,7 +26,7 @@ Then open `http://127.0.0.1:4174/`.
 - The worker cycle also produces helmeted chainsaw walkers. They seek mature trees, visibly run their saws, fell trees for score and personal progress, and leave saplings that begin regrowing after 16 seconds.
 - Three articulated dragons begin above the terrain, flap and bank around the globe, chase riders, breathe layered fire with a hot core, sparks, and local firelight, and eat captured offspring. After three meals, a dragon hatches a smaller next-generation dragon that grows to full size; the brood has no population cap. Scorched riders visibly catch fire around the torso and head with flickering flames, embers, and rising smoke. If the founding rider is eaten, a replacement redeploys from a charging station after a short delay.
 - Touch: tap **AUTO** to toggle autopilot; hold **GO** and use the steering buttons to take over.
-- Camera: drag to orbit smoothly around the planet, pinch or scroll to change distance, and release to coast gently. On desktop, right- or middle-drag anchors the camera position while pivoting the view. Tap **◎** for a globe overview, or tap **SURFACE** to incarnate beside the mower and **RETURN** to restore the previous free-camera pose. The mower never affects the free camera.
+- Camera: drag to orbit smoothly around the planet, pinch or scroll to change distance, and release to coast gently. On desktop, right- or middle-drag anchors the camera position while pivoting the view. Tap **◎** for a globe overview. **SURFACE** becomes a maneuverable chase view linked to the founder; drag/pinch orbits and zooms around him, and **RETURN** restores the previous free-camera pose.
 - Keyboard: `W/A/S/D` or arrow keys.
 - Autopilot returns to the nearest amber field station to recharge.
 

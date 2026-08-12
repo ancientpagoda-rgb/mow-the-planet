@@ -220,6 +220,7 @@ let globeView = false;
 let savedCameraPose = null;
 let surfaceView = false;
 let savedSurfacePose = null;
+let surfaceFollowBasis = null;
 let cameraHoldActive = false;
 let heldCameraPose = null;
 const USE_CUSTOM_CAMERA_CONTROLS = false;
@@ -4705,6 +4706,7 @@ function draw(dt) {
     cameraSpin.yaw *= spinDecay;
     cameraSpin.pitch *= spinDecay;
   }
+  if (surfaceView) updateFounderSurfaceCamera();
   if (cameraHoldActive && heldCameraPose) {
     camera.position.copy(heldCameraPose.position);
     camera.fov = heldCameraPose.fov;
@@ -4822,34 +4824,59 @@ function enterSurfaceView() {
     target: cameraControls.target.clone(),
     minDistance: cameraControls.minDistance,
     maxDistance: cameraControls.maxDistance,
+    rotateSpeed: cameraControls.rotateSpeed,
+    zoomSpeed: cameraControls.zoomSpeed,
     zoom: cameraZoom,
   };
 
-  const frame = planetFrame(mower.x, mower.y);
-  const rootRotation = planetRoot.quaternion;
-  const normal = frame.normal.clone().applyQuaternion(rootRotation);
-  const forward = frame.east.clone().multiplyScalar(Math.cos(mower.angle))
-    .addScaledVector(frame.south, Math.sin(mower.angle)).normalize().applyQuaternion(rootRotation);
-  const side = forward.clone().cross(normal).normalize();
-  const surfacePoint = frame.normal.clone()
-    .multiplyScalar(PLANET_RADIUS + terrainHeightAt(mower.x, mower.y) + 92)
-    .applyQuaternion(rootRotation);
-
-  camera.position.copy(surfacePoint).addScaledVector(forward, -135).addScaledVector(side, 62);
-  camera.up.copy(normal);
-  cameraControls.target.copy(camera.position).addScaledVector(forward, 240).addScaledVector(normal, -18);
+  const follow = founderSurfaceFollowFrame();
+  camera.position.copy(follow.ground)
+    .addScaledVector(follow.normal, 195)
+    .addScaledVector(follow.forward, -410)
+    .addScaledVector(follow.side, 55);
+  camera.up.copy(follow.normal);
+  cameraControls.target.copy(follow.target);
   camera.lookAt(cameraControls.target);
-  cameraControls.minDistance = 18;
-  cameraControls.maxDistance = PLANET_RADIUS * 3.35;
-  setCameraZoom(0.78);
+  surfaceFollowBasis = follow.basis.clone();
+  cameraControls.minDistance = 175;
+  cameraControls.maxDistance = 1100;
+  cameraControls.rotateSpeed = 0.62;
+  cameraControls.zoomSpeed = 0.86;
+  setCameraZoom(0.94);
   surfaceView = true;
   globeView = false;
   ui.zoomGlobe.classList.remove("is-on");
   ui.surfaceView.classList.add("is-on");
   ui.surfaceView.setAttribute("aria-pressed", "true");
   ui.surfaceView.textContent = "RETURN";
-  ui.hint.textContent = "Surface view · right/middle-drag looks around · tap RETURN to leave";
+  ui.hint.textContent = "Following founder · drag to orbit · pinch or scroll to zoom";
   cameraControls.update();
+}
+
+function founderSurfaceFollowFrame() {
+  const frame = planetFrame(mower.x, mower.y);
+  const rootRotation = planetRoot.quaternion;
+  const normal = frame.normal.clone().applyQuaternion(rootRotation).normalize();
+  const forward = frame.east.clone().multiplyScalar(Math.cos(mower.angle))
+    .addScaledVector(frame.south, Math.sin(mower.angle)).normalize().applyQuaternion(rootRotation).normalize();
+  const side = forward.clone().cross(normal).normalize();
+  const ground = frame.normal.clone()
+    .multiplyScalar(PLANET_RADIUS + terrainHeightAt(mower.x, mower.y) + 2)
+    .applyQuaternion(rootRotation);
+  const target = ground.clone().addScaledVector(normal, 58).addScaledVector(forward, 82);
+  const basis = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, normal, side));
+  return { normal, forward, side, ground, target, basis };
+}
+
+function updateFounderSurfaceCamera() {
+  if (!surfaceView || !surfaceFollowBasis || !camera || !cameraControls || !planetRoot) return;
+  const follow = founderSurfaceFollowFrame();
+  const rotationDelta = follow.basis.clone().multiply(surfaceFollowBasis.clone().invert()).normalize();
+  const offset = camera.position.clone().sub(cameraControls.target).applyQuaternion(rotationDelta);
+  camera.position.copy(follow.target).add(offset);
+  camera.up.copy(follow.normal);
+  cameraControls.target.copy(follow.target);
+  surfaceFollowBasis.copy(follow.basis);
 }
 
 function leaveSurfaceView() {
@@ -4861,9 +4888,12 @@ function leaveSurfaceView() {
   cameraControls.target.copy(savedSurfacePose.target);
   cameraControls.minDistance = savedSurfacePose.minDistance;
   cameraControls.maxDistance = savedSurfacePose.maxDistance;
+  cameraControls.rotateSpeed = savedSurfacePose.rotateSpeed;
+  cameraControls.zoomSpeed = savedSurfacePose.zoomSpeed;
   setCameraZoom(savedSurfacePose.zoom);
   surfaceView = false;
   savedSurfacePose = null;
+  surfaceFollowBasis = null;
   ui.surfaceView.classList.remove("is-on");
   ui.surfaceView.setAttribute("aria-pressed", "false");
   ui.surfaceView.textContent = "SURFACE";
@@ -4935,7 +4965,7 @@ function endGlobeDrag(event) {
 }
 
 function holdCamera(event) {
-  if ((event.button !== 1 && event.button !== 2) || !camera || !cameraControls) return;
+  if (surfaceView || (event.button !== 1 && event.button !== 2) || !camera || !cameraControls) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   clearOrbitMomentum();
