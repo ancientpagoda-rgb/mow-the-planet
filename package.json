@@ -1,0 +1,14 @@
+{
+  "name": "wildworld",
+  "version": "1.0.0",
+  "description": "A touch-first living-planet simulation.",
+  "main": "game.js",
+  "scripts": {
+    "test": "node --check game.js"
+  },
+  "keywords": [],
+  "type": "module",
+  "dependencies": {
+    "three": "0.185.1"
+  }
+}
