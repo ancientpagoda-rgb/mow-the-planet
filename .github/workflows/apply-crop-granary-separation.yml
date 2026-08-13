@@ -1,0 +1,101 @@
+name: Apply crop granary separation
+
+on:
+  push:
+    branches:
+      - agent/crop-granary-separation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/crop-granary-separation
+
+      - name: Separate mowing from crop cargo
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          game = Path("game.js")
+          s = game.read_text()
+
+          if "let harvestedCropCells = 0;" in s:
+              raise SystemExit("Patch already applied")
+
+          old = "  let newlyCut = 0;\n"
+          assert s.count(old) == 1, f"unexpected newlyCut count: {s.count(old)}"
+          s = s.replace(old, "  let newlyCut = 0;\n  let harvestedCropCells = 0;\n", 1)
+
+          old = """      if (Math.hypot(worldDeltaX(x, deckX), y - deckY) <= deckRadius) {
+        cut[index] = 1;
+        cropStage[index] = 0;
+"""
+          new = """      if (Math.hypot(worldDeltaX(x, deckX), y - deckY) <= deckRadius) {
+        const harvestedCrop = cropStage[index] === 4;
+        cut[index] = 1;
+        cropStage[index] = 0;
+"""
+          assert s.count(old) == 1, f"unexpected cutting block count: {s.count(old)}"
+          s = s.replace(old, new, 1)
+
+          old = """        newlyCut += 1;
+        unplantedHarvestCells.push(index);
+"""
+          new = """        newlyCut += 1;
+        if (harvestedCrop) harvestedCropCells += 1;
+        unplantedHarvestCells.push(index);
+"""
+          assert s.count(old) == 1, f"unexpected newly-cut block count: {s.count(old)}"
+          s = s.replace(old, new, 1)
+
+          old = """    mowingAgent.grainCargoCells = (mowingAgent.grainCargoCells || 0) + newlyCut;
+    if (grainHoldIsFull(mowingAgent)) mowingAgent.returningToGranary = true;
+"""
+          new = """    if (harvestedCropCells > 0) {
+      mowingAgent.grainCargoCells = (mowingAgent.grainCargoCells || 0) + harvestedCropCells;
+      if (grainHoldIsFull(mowingAgent)) mowingAgent.returningToGranary = true;
+    }
+"""
+          assert s.count(old) == 1, f"unexpected grain cargo block count: {s.count(old)}"
+          s = s.replace(old, new, 1)
+
+          s = s.replace(
+              'ui.tractorUpgrade.textContent = tractorUnlocked ? "TRACTOR ✓" : "TRACTOR · 5K";',
+              'ui.tractorUpgrade.textContent = tractorUnlocked ? "TRACTOR ✓" : "TRACTOR · 5,000 PTS";'
+          )
+          s = s.replace(
+              'ui.clippings.textContent = `${grainStoredKg.toFixed(1)} kg stored · ${constructionProgress}`;',
+              'ui.clippings.textContent = `${grainStoredKg.toFixed(1)} kg crop stored · ${constructionProgress}`;'
+          )
+          s = s.replace(
+              'ui.status.textContent = `Auto · hauling ${grainCargoKg(mower).toFixed(1)} kg to granary`;',
+              'ui.status.textContent = `Auto · hauling ${grainCargoKg(mower).toFixed(1)} kg crop to granary`;'
+          )
+
+          game.write_text(s)
+
+          index = Path("index.html")
+          html = index.read_text()
+          html = html.replace('>TRACTOR · 5K</button>', '>TRACTOR · 5,000 PTS</button>')
+          index.write_text(html)
+
+          workflow = Path(".github/workflows/apply-crop-granary-separation.yml")
+          workflow.unlink()
+          PY
+
+      - name: Syntax check
+        run: node --check game.js
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Separate mowing points from crop granary cargo"
+          git push origin HEAD:agent/crop-granary-separation
