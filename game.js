@@ -327,6 +327,8 @@ let stoneStock = 0;
 const stronghold = { housing: 0, mill: 0, smithy: 0, lumberyard: 0, guardTower: 0 };
 let strongholdModel = null;
 const strongholdMillWheels = [];
+const civilizationNames = ["Mower outpost", "Farmstead", "Village", "Town", "Stronghold", "Planetary civilization"];
+let civilizationLevel = 0;
 let barbarianVillage = null;
 const barbarianArrows = [];
 let barbarianArrowHits = 0;
@@ -626,6 +628,7 @@ function clearCastles() {
   strongholdModel = null;
   strongholdMillWheels.length = 0;
   Object.keys(stronghold).forEach((building) => { stronghold[building] = 0; });
+  civilizationLevel = 0;
   nextCastleId = 1;
   castleConstructionCooldownUntil = 0;
 }
@@ -1085,6 +1088,25 @@ function strongholdCostText(cost) {
   return pieces.join("/");
 }
 
+function civilizationTargetLevel() {
+  const population = 1 + offspring.length;
+  const buildings = Object.values(stronghold).reduce((total, level) => total + level, 0);
+  if (population >= 12 && buildings >= 16 && villageWallLevel >= 5 && castles.length) return 5;
+  if (population >= 10 && buildings >= 11 && villageWallLevel >= 3) return 4;
+  if (population >= 7 && buildings >= 6 && villageWallLevel >= 1) return 3;
+  if (population >= 4 && buildings >= 2) return 2;
+  if (population >= 2) return 1;
+  return 0;
+}
+
+function updateCivilization() {
+  const nextLevel = Math.max(civilizationLevel, civilizationTargetLevel());
+  if (nextLevel === civilizationLevel) return;
+  civilizationLevel = nextLevel;
+  refreshStrongholdModel();
+  announceAttack(`${civilizationNames[civilizationLevel]} established · the mower council expands the settlement`);
+}
+
 function refreshStrongholdModel() {
   if (!planetRoot) return;
   strongholdModel?.removeFromParent();
@@ -1116,6 +1138,28 @@ function refreshStrongholdModel() {
     parent.add(part);
     return part;
   };
+  if (civilizationLevel >= 1) {
+    mesh(new THREE.CylinderGeometry(44, 52, 10, 10), stone, [0, 5, 0]);
+    mesh(new THREE.CylinderGeometry(14, 23, 18, 8), ember, [0, 14, 0]);
+  }
+  if (civilizationLevel >= 2) {
+    mesh(new THREE.BoxGeometry(560, 4, 28), stone, [0, 2, 0]);
+    mesh(new THREE.BoxGeometry(28, 4, 560), stone, [0, 2, 0]);
+  }
+  if (civilizationLevel >= 3) {
+    mesh(new THREE.CylinderGeometry(86, 100, 12, 12), stone, [0, 6, 0]);
+    const marketRoof = mesh(new THREE.ConeGeometry(74, 48, 8), roof, [0, 40, 0]);
+    marketRoof.rotation.y = Math.PI / 8;
+  }
+  if (civilizationLevel >= 4) {
+    mesh(new THREE.BoxGeometry(122, 86, 104), stone, [0, 43, 0]);
+    const hallRoof = mesh(new THREE.ConeGeometry(92, 56, 4), roof, [0, 114, 0]);
+    hallRoof.rotation.y = Math.PI / 4;
+  }
+  if (civilizationLevel >= 5) {
+    mesh(new THREE.CylinderGeometry(20, 27, 180, 10), iron, [0, 90, 0]);
+    mesh(new THREE.SphereGeometry(28, 12, 8), ember, [0, 190, 0]);
+  }
   const houseSites = [[-260, -150], [-205, -270], [-95, -330], [35, -330], [155, -285], [250, -195], [285, -70]];
   for (let index = 0; index < stronghold.housing; index += 1) {
     const [x, z] = houseSites[index % houseSites.length];
@@ -3007,6 +3051,7 @@ function update(dt) {
   updateBarbarianVillage(dt);
   processReproduction();
   processVillageCouncil();
+  updateCivilization();
   if (newlyCut > 0) lawnTextureDirty = true;
   if (lawnTextureDirty && lawnTexture && textureRefreshIn <= 0) {
     lawnTexture.needsUpdate = true;
@@ -3108,7 +3153,7 @@ function updateUI() {
   const scoreNow = liveScore();
   const capacity = colonyCapacity();
   ui.crew.textContent = `${colony.length} / ${capacity}`;
-  ui.generation.textContent = `Walls ${villageWallLevel}`;
+  ui.generation.textContent = civilizationNames[civilizationLevel];
   ui.level.textContent = `Lv ${mower.level || 1}`;
   ui.score.textContent = scoreNow.toLocaleString();
   ui.threat.textContent = `${dragons.length} dragons · cat · ${barbarianVillage?.bowmen.length || 8} bowmen`;
