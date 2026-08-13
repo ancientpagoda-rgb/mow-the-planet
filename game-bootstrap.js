@@ -20,6 +20,18 @@ replaceOnce(
   `import { createScientificWorld } from ${JSON.stringify(scientificWorldUrl)};`,
 );
 
+replaceOnce("dragon ecology constants", "const DRAGON_BROOD_MEALS = 3;\n", "const DRAGON_BROOD_MEALS = 3;\nconst DRAGON_MATURITY_SECONDS = 42;\nconst DRAGON_BROOD_COOLDOWN = 58;\n");
+replaceOnce("starting dragon ecology", "      generation: 1,\n      meals: 0,\n      age: 999,\n      birthScale: 1,", "      generation: 1,\n      meals: 0,\n      broodEnergy: 0,\n      nextBroodAt: 20 + index * 6,\n      age: 999,\n      birthScale: 1,");
+replaceOnce("hatchling dragon ecology", "    generation: parent.generation + 1,\n    meals: 0,\n    age: 0,\n    birthScale: 0.58,", "    generation: parent.generation + 1,\n    meals: 0,\n    broodEnergy: 0,\n    nextBroodAt: elapsed + DRAGON_MATURITY_SECONDS + 12 + (id % 4) * 4,\n    age: 0,\n    birthScale: 0.58,");
+replaceOnce("dragon meal reproduction", "  dragon.meals = (dragon.meals || 0) + 1;\n  if (dragon.meals >= DRAGON_BROOD_MEALS) {\n    dragon.meals -= DRAGON_BROOD_MEALS;\n    hatchDragon(dragon);\n  }", "  dragon.meals = (dragon.meals || 0) + 1;\n  dragon.broodEnergy = Math.min(DRAGON_BROOD_MEALS, (dragon.broodEnergy || 0) + 1);\n  dragon.nextBroodAt = Math.min(dragon.nextBroodAt || (elapsed + DRAGON_BROOD_COOLDOWN), elapsed + 22);");
+replaceOnce("natural dragon reproduction", "function updateDragons(dt) {\n  for (const dragon of dragons) {\n    dragon.age = (dragon.age || 0) + dt;", "function updateDragons(dt) {\n  for (const dragon of dragons) {\n    dragon.age = (dragon.age || 0) + dt;\n    const preyAvailability = Math.min(1, (1 + offspring.length) / 4);\n    dragon.broodEnergy = Math.min(DRAGON_BROOD_MEALS, (dragon.broodEnergy || 0) + dt * 0.02 * preyAvailability);\n    dragon.nextBroodAt ??= elapsed + DRAGON_BROOD_COOLDOWN + ((dragon.id * 11) % 17);\n    const hasMatureMate = dragon.age >= DRAGON_MATURITY_SECONDS && dragons.some((mate) => mate !== dragon && (mate.age || 0) >= DRAGON_MATURITY_SECONDS);\n    if (hasMatureMate && dragon.broodEnergy >= 1 && elapsed >= dragon.nextBroodAt) {\n      const broodSize = Math.min(3, Math.max(1, Math.floor(dragon.broodEnergy)));\n      dragon.broodEnergy = Math.max(0, dragon.broodEnergy - broodSize);\n      dragon.nextBroodAt = elapsed + DRAGON_BROOD_COOLDOWN + ((dragon.id * 13 + dragon.generation * 7) % 17);\n      for (let hatch = 0; hatch < broodSize; hatch += 1) hatchDragon(dragon);\n    }");
+replaceOnce("remove apex cat initialization", "  initializeApexCat();\n", "");
+replaceOnce("remove apex cat reset", "  resetApexCat();\n", "");
+replaceOnce("remove apex cat simulation", "  updateApexCat(dt);\n", "");
+replaceOnce("remove apex cat rendering", "  positionApexCatModel();\n", "");
+replaceOnce("remove apex cat threat label", '  ui.threat.textContent = `${dragons.length} dragons · cat · ${barbarianVillage?.bowmen.length || 8} bowmen`;', '  ui.threat.textContent = `${dragons.length} dragons · ${barbarianVillage?.bowmen.length || 8} bowmen`;');
+replaceOnce("remove apex cat finish stat", " · cat ate ${creaturesEatenByCat} creatures", "");
+
 const specsJson = JSON.stringify(MOWER_UPGRADE_SPECS);
 replaceOnce(
   "upgrade state",
