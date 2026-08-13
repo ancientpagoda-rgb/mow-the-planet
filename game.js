@@ -77,7 +77,6 @@ const TREE_REGROW_DELAY = 16;
 const TREE_GROW_SECONDS = 28;
 const TREE_GROW_LEVELS = 77;
 const TREE_REWARD_CELLS = Math.ceil(0.35 / CLIPPINGS_PER_CELL);
-const GRASS_REGROW_SECONDS = 55;
 const BASE_COLONY_CAP = 12;
 const MAX_COLONY = 20;
 const DRAGON_COUNT = 3;
@@ -204,8 +203,6 @@ const cropType = new Uint8Array(COLS * ROWS);
 let totalCuttable = 0;
 let cutCount = 0;
 let currentCutCount = 0;
-const grassRegrowthQueue = [];
-let grassRegrowthHead = 0;
 const cropSproutQueue = [];
 const cropYoungQueue = [];
 const unplantedHarvestCells = [];
@@ -551,8 +548,6 @@ function generateLawn() {
   totalCuttable = 0;
   cutCount = 0;
   currentCutCount = 0;
-  grassRegrowthQueue.length = 0;
-  grassRegrowthHead = 0;
   cropSproutQueue.length = 0;
   cropYoungQueue.length = 0;
   unplantedHarvestCells.length = 0;
@@ -1494,7 +1489,6 @@ function plantCrops(agent) {
       const cropSpeed = 1 + villageSkills.agriculture * 0.12;
       cropSproutQueue.push({ index, growAt: elapsed + 8 / cropSpeed });
       cropYoungQueue.push({ index, growAt: elapsed + 22 / cropSpeed });
-      grassRegrowthQueue.push({ index, regrowAt: elapsed + GRASS_REGROW_SECONDS / cropSpeed });
       renderGrassCell(col, row, true);
       planted += 1;
     }
@@ -3268,24 +3262,7 @@ function updateGrassRegrowth() {
     renderGrassCell(col, row, true);
     changed += 1;
   }
-  while (grassRegrowthHead < grassRegrowthQueue.length) {
-    const entry = grassRegrowthQueue[grassRegrowthHead];
-    if (entry.regrowAt > elapsed) break;
-    grassRegrowthHead += 1;
-    if (!cut[entry.index]) continue;
-    cut[entry.index] = 0;
-    cropStage[entry.index] = 4;
-    currentCutCount = Math.max(0, currentCutCount - 1);
-    const row = Math.floor(entry.index / COLS);
-    const col = entry.index - row * COLS;
-    renderGrassCell(col, row, false);
-    changed += 1;
-  }
   if (changed > 0) lawnTextureDirty = true;
-  if (grassRegrowthHead > 10000 && grassRegrowthHead > grassRegrowthQueue.length / 2) {
-    grassRegrowthQueue.splice(0, grassRegrowthHead);
-    grassRegrowthHead = 0;
-  }
   if (cropSproutHead > 10000 && cropSproutHead > cropSproutQueue.length / 2) {
     cropSproutQueue.splice(0, cropSproutHead);
     cropSproutHead = 0;
