@@ -112,6 +112,14 @@ function updateFounderUpgradePanel(scoreNow) {
   ensureFounderUpgradePanel();
   const panel = document.querySelector("#founder-upgrades");
   if (!panel) return;
+  const keys = Object.keys(founderUpgradeSpecs);
+  const signature = String(running) + '|' + String(finished) + '|' + keys.map((key) => {
+    const level = founderUpgrades[key] || 0;
+    if (level >= FOUNDER_UPGRADE_MAX) return key + ':M';
+    return key + ':' + level + ':' + (scoreNow >= founderUpgradeCost(key) ? '1' : '0');
+  }).join('|');
+  if (panel.dataset.signature === signature) return;
+  panel.dataset.signature = signature;
   for (const [key, spec] of Object.entries(founderUpgradeSpecs)) {
     const button = panel.querySelector('[data-founder-upgrade="' + key + '"]');
     if (!button) continue;
@@ -129,6 +137,7 @@ function updateFounderUpgradePanel(scoreNow) {
 
 replaceOnce("hopper capacity", "  return baseCapacity * (1 + ((agent.level || 1) - 1) * 0.12) * (1 + villageSkills.machinery * 0.1);", "  const founderCapacityFactor = agent === mower ? founderHopperFactor() : 1;\n  return baseCapacity * (1 + ((agent.level || 1) - 1) * 0.12) * (1 + villageSkills.machinery * 0.1) * founderCapacityFactor;");
 replaceOnce("deck level scaling", "  agent.deckRadius = agent.baseDeckRadius * (1 + (earnedLevel - 1) * 0.1);", "  if (agent === mower) applyFounderUpgradeStats();\n  else agent.deckRadius = agent.baseDeckRadius * (1 + (earnedLevel - 1) * 0.1);");
+replaceOnce("reset deck upgrade", "  mower.deckRadius = mower.baseDeckRadius;\n  mower.reproductionProgress = 0;", "  applyFounderUpgradeStats();\n  mower.reproductionProgress = 0;");
 replaceOnce("mower deck visual", "  deck.castShadow = true;\n  group.add(deck);\n  box(group, new THREE.Vector3(67, 27, 54), bodyColor, new THREE.Vector3(16, 25, 0), { roughness: 0.52, metalness: 0.16 });", "  deck.castShadow = true;\n  group.add(deck);\n  group.userData.mowerDeck = deck;\n  box(group, new THREE.Vector3(67, 27, 54), bodyColor, new THREE.Vector3(16, 25, 0), { roughness: 0.52, metalness: 0.16 });");
 replaceOnce("tractor deck upgrade", "  mower.baseDeckRadius = 82 / SURFACE_SCALE;\n  mower.deckRadius = mower.baseDeckRadius * (1 + ((mower.level || 1) - 1) * 0.1);", "  mower.baseDeckRadius = 82 / SURFACE_SCALE;\n  applyFounderUpgradeStats();");
 replaceOnce("dragon fire armor", "  const fireProtection = Math.min(0.72, stronghold.guardTower * 0.06 + villageSkills.defense * 0.045);", "  const baseFireProtection = Math.min(0.72, stronghold.guardTower * 0.06 + villageSkills.defense * 0.045);\n  const fireProtection = agent === mower ? Math.min(0.86, 1 - (1 - baseFireProtection) * (1 - founderArmorProtection())) : baseFireProtection;");
