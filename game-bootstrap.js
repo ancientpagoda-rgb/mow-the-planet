@@ -1,4 +1,4 @@
-import { MOWER_UPGRADE_MAX, MOWER_UPGRADE_SPECS, mowerUpgradeCost } from "./mower-upgrades.js";
+import { MOWER_UPGRADE_MAX, MOWER_UPGRADE_SPECS } from "./mower-upgrades.js";
 
 // Load the camera helper before the main game so it can capture OrbitControls.
 await import("./planet-keyboard-camera.js?v=planet-arrows1");
@@ -96,16 +96,15 @@ function ensureFounderUpgradePanel() {
     if (button) buyFounderUpgrade(button.dataset.founderUpgrade);
   });
   const style = document.createElement("style");
-  style.textContent = `
-    .founder-upgrades{position:fixed;z-index:9;top:calc(330px + var(--safe-top));left:calc(12px + var(--safe-left));width:238px;padding:7px;border:1px solid rgba(120,168,143,.28);border-radius:14px;background:rgba(11,17,15,.86);box-shadow:0 12px 30px rgba(0,0,0,.25);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
-    #founder-upgrade-toggle{width:100%;min-height:32px;border:1px solid rgba(208,160,91,.42);border-radius:9px;color:var(--amber);background:rgba(11,15,14,.78);font-size:9px;font-weight:850;letter-spacing:.08em}
-    .founder-upgrade-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
-    .founder-upgrade-grid button{min-width:0;min-height:46px;display:grid;align-content:center;gap:2px;border:1px solid rgba(120,168,143,.2);border-radius:9px;padding:5px 6px;color:var(--text);background:rgba(18,26,23,.82);text-align:left}
-    .founder-upgrade-grid button.is-affordable{border-color:rgba(208,160,91,.62);color:var(--text-strong)}
-    .founder-upgrade-grid button:disabled{opacity:.5}.founder-upgrade-grid strong{overflow:hidden;font-size:9px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}.founder-upgrade-grid small{color:var(--muted);font-size:7px;line-height:1.2}
-    .founder-upgrades.is-collapsed{width:126px;padding:5px;background:rgba(11,17,15,.72)}.founder-upgrades.is-collapsed .founder-upgrade-grid{display:none}
-    @media(max-width:620px){.founder-upgrades{top:calc(300px + var(--safe-top));width:212px}.founder-upgrades.is-collapsed{width:116px}#founder-upgrade-toggle{min-height:29px;font-size:8px}.founder-upgrade-grid button{min-height:42px;padding:4px 5px}}
-  `;
+  style.textContent =
+    '.founder-upgrades{position:fixed;z-index:9;top:calc(330px + var(--safe-top));left:calc(12px + var(--safe-left));width:238px;padding:7px;border:1px solid rgba(120,168,143,.28);border-radius:14px;background:rgba(11,17,15,.86);box-shadow:0 12px 30px rgba(0,0,0,.25);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}' +
+    '#founder-upgrade-toggle{width:100%;min-height:32px;border:1px solid rgba(208,160,91,.42);border-radius:9px;color:var(--amber);background:rgba(11,15,14,.78);font-size:9px;font-weight:850;letter-spacing:.08em}' +
+    '.founder-upgrade-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}' +
+    '.founder-upgrade-grid button{min-width:0;min-height:46px;display:grid;align-content:center;gap:2px;border:1px solid rgba(120,168,143,.2);border-radius:9px;padding:5px 6px;color:var(--text);background:rgba(18,26,23,.82);text-align:left}' +
+    '.founder-upgrade-grid button.is-affordable{border-color:rgba(208,160,91,.62);color:var(--text-strong)}' +
+    '.founder-upgrade-grid button:disabled{opacity:.5}.founder-upgrade-grid strong{overflow:hidden;font-size:9px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}.founder-upgrade-grid small{color:var(--muted);font-size:7px;line-height:1.2}' +
+    '.founder-upgrades.is-collapsed{width:126px;padding:5px;background:rgba(11,17,15,.72)}.founder-upgrades.is-collapsed .founder-upgrade-grid{display:none}' +
+    '@media(max-width:620px){.founder-upgrades{top:calc(300px + var(--safe-top));width:212px}.founder-upgrades.is-collapsed{width:116px}#founder-upgrade-toggle{min-height:29px;font-size:8px}.founder-upgrade-grid button{min-height:42px;padding:4px 5px}}';
   document.head.append(style);
 }
 
