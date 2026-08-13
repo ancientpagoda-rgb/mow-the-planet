@@ -623,7 +623,6 @@ button { font: inherit; }
 }
 
 /* Quiet mode: the world is the interface. Keep only useful fortress telemetry. */
-.modal,
 .birth-toast,
 .hint,
 .planet-tracker,

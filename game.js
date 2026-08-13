@@ -213,7 +213,9 @@ let cropSproutHead = 0;
 let cropYoungHead = 0;
 let cropCellsPlanted = 0;
 let seed = 7319;
-let running = true;
+// Keep the simulation paused until the player explicitly starts it. This also
+// ensures the first interaction can unlock audio on mobile browsers.
+let running = false;
 let finished = false;
 let elapsed = 0;
 let damage = 0;
