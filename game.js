@@ -925,10 +925,30 @@ function createCastleModel(castle) {
   const towerRadius = 24 + level * 3;
   const towerHeight = wallHeight + 34 + level * 9;
   addMesh(new THREE.CylinderGeometry(half * 0.94, half, 8, 20), darkStone, 0, 4, 0);
-  addMesh(new THREE.BoxGeometry(span, wallHeight, wallThickness), stone, 0, wallHeight / 2, -half);
-  addMesh(new THREE.BoxGeometry(span, wallHeight, wallThickness), stone, 0, wallHeight / 2, half);
-  addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, span), stone, -half, wallHeight / 2, 0);
-  addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, span), stone, half, wallHeight / 2, 0);
+  // One extruded frame makes the curtain wall a single continuous enclosure,
+  // instead of four separate slabs that can show seams at their corners.
+  const outerHalf = half + wallThickness / 2;
+  const innerHalf = half - wallThickness / 2;
+  const wallOutline = new THREE.Shape();
+  wallOutline.moveTo(-outerHalf, -outerHalf);
+  wallOutline.lineTo(outerHalf, -outerHalf);
+  wallOutline.lineTo(outerHalf, outerHalf);
+  wallOutline.lineTo(-outerHalf, outerHalf);
+  wallOutline.closePath();
+  const courtyard = new THREE.Path();
+  courtyard.moveTo(-innerHalf, -innerHalf);
+  courtyard.lineTo(-innerHalf, innerHalf);
+  courtyard.lineTo(innerHalf, innerHalf);
+  courtyard.lineTo(innerHalf, -innerHalf);
+  courtyard.closePath();
+  wallOutline.holes.push(courtyard);
+  const curtainWallGeometry = new THREE.ExtrudeGeometry(wallOutline, {
+    depth: wallHeight,
+    bevelEnabled: false,
+    curveSegments: 1,
+  });
+  curtainWallGeometry.rotateX(-Math.PI / 2);
+  addMesh(curtainWallGeometry, stone, 0, 0, 0);
   for (const x of [-half, half]) {
     for (const z of [-half, half]) {
       addMesh(new THREE.CylinderGeometry(towerRadius * 1.08, towerRadius, towerHeight, 10), stone, x, towerHeight / 2, z);
@@ -939,7 +959,7 @@ function createCastleModel(castle) {
   const keepHeight = 78 + level * 31;
   const keepSize = 62 + level * 12;
   addMesh(new THREE.BoxGeometry(keepSize, keepHeight, keepSize), stone, 0, keepHeight / 2, 0);
-  const gate = addMesh(new THREE.BoxGeometry(6, wallHeight * 0.68, 31), darkStone, half + wallThickness * 0.48, wallHeight * 0.34, 0);
+  const gate = addMesh(new THREE.BoxGeometry(6, wallHeight * 0.68, 31), darkStone, outerHalf + 3, wallHeight * 0.34, 0);
   gate.castShadow = false;
   const battlementSize = 12 + level;
   for (let slot = -3; slot <= 3; slot += 1) {
