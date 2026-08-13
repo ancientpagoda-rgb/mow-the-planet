@@ -79,9 +79,10 @@
       </aside>
 
       <nav class="zoom-controls" aria-label="Camera controls">
-        <button id="zoom-globe" type="button" aria-label="Show whole planet">◎</button>
-        <button id="surface-view" type="button" aria-label="Enter founder POV" aria-pressed="false">POV</button>
-        <button id="chase-view" type="button" aria-label="Enter founder chase view" aria-pressed="false">CHASE</button>
+        <span class="camera-controls__label">Camera</span>
+        <button id="zoom-globe" type="button" aria-label="Show whole planet">PLANET</button>
+        <button id="surface-view" type="button" aria-label="Enter mower cockpit view" aria-pressed="false">COCKPIT</button>
+        <button id="chase-view" type="button" aria-label="Follow behind the mower" aria-pressed="false">FOLLOW</button>
       </nav>
 
       <section class="touch-controls" aria-label="Mower controls">
@@ -103,7 +104,7 @@
         <button id="mint-gold" type="button">100 SILVER → 1 GOLD</button>
       </section>
 
-      <aside class="hint" id="hint">Drag to orbit · pinch or scroll to zoom · right/middle-drag pivots</aside>
+      <aside class="hint" id="hint">Camera: drag to orbit · scroll or pinch to zoom · Planet, Follow, or Cockpit</aside>
 
       <section class="modal modal--open" id="start-modal" role="dialog" aria-modal="true" aria-labelledby="start-title">
         <div class="modal__card">

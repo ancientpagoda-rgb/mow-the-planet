@@ -1595,7 +1595,6 @@ function setAutoMode(enabled) {
   ui.auto.classList.toggle("is-on", autoMode);
   ui.auto.setAttribute("aria-pressed", String(autoMode));
   ui.auto.textContent = autoMode ? "Auto on" : "Auto";
-  if (autoMode) ui.hint.classList.add("is-hidden");
 }
 
 function pointIsBlocked(x, y, margin = 31 / SURFACE_SCALE) {
@@ -3078,7 +3077,6 @@ function update(dt) {
 
   const completion = currentCutCount / Math.max(1, totalCuttable);
   if (completion >= FINISH_THRESHOLD) finishJob();
-  if (newlyCut > 0) ui.hint.classList.add("is-hidden");
   if (birthToastUntil && elapsed >= birthToastUntil) {
     ui.birthToast.classList.remove("is-visible");
     birthToastUntil = 0;
@@ -5408,6 +5406,7 @@ function toggleGlobeView() {
   }
   ui.zoomGlobe.classList.toggle("is-on", globeView);
   ui.zoomGlobe.setAttribute("aria-label", globeView ? "Return to free camera" : "Show whole planet");
+  ui.zoomGlobe.textContent = globeView ? "RETURN" : "PLANET";
   cameraControls.update();
 }
 
@@ -5430,6 +5429,8 @@ function enterSurfaceView(mode = "pov") {
     surfaceView = true;
     globeView = false;
     ui.zoomGlobe.classList.remove("is-on");
+    ui.zoomGlobe.textContent = "PLANET";
+    ui.zoomGlobe.setAttribute("aria-label", "Show whole planet");
   }
   surfaceCameraMode = mode;
   surfaceLookYaw = 0;
@@ -5441,8 +5442,8 @@ function enterSurfaceView(mode = "pov") {
   setCameraZoom(mode === "pov" ? 0.88 : 0.96);
   updateSurfaceViewButtons();
   ui.hint.textContent = mode === "pov"
-    ? "Founder POV · drag to look · pinch or scroll to zoom"
-    : "Founder chase · drag to orbit · pinch or scroll for distance";
+    ? "Cockpit camera: drag to look · scroll or pinch to zoom · tap Exit to leave"
+    : "Follow camera: drag to orbit · scroll or pinch for distance · tap Exit to leave";
   updateFounderSurfaceCamera();
 }
 
@@ -5451,12 +5452,12 @@ function updateSurfaceViewButtons() {
   const chaseActive = surfaceView && surfaceCameraMode === "chase";
   ui.surfaceView.classList.toggle("is-on", povActive);
   ui.surfaceView.setAttribute("aria-pressed", String(povActive));
-  ui.surfaceView.setAttribute("aria-label", povActive ? "Return to globe camera" : "Enter founder POV");
-  ui.surfaceView.textContent = povActive ? "RETURN" : "POV";
+  ui.surfaceView.setAttribute("aria-label", povActive ? "Exit cockpit view" : "Enter mower cockpit view");
+  ui.surfaceView.textContent = povActive ? "EXIT" : "COCKPIT";
   ui.chaseView.classList.toggle("is-on", chaseActive);
   ui.chaseView.setAttribute("aria-pressed", String(chaseActive));
-  ui.chaseView.setAttribute("aria-label", chaseActive ? "Return to globe camera" : "Enter founder chase view");
-  ui.chaseView.textContent = chaseActive ? "RETURN" : "CHASE";
+  ui.chaseView.setAttribute("aria-label", chaseActive ? "Exit follow view" : "Follow behind the mower");
+  ui.chaseView.textContent = chaseActive ? "EXIT" : "FOLLOW";
 }
 
 function updateFounderSurfaceCamera() {
@@ -5504,7 +5505,7 @@ function leaveSurfaceView() {
   surfaceLookPointerId = null;
   for (const object of mowerModel?.userData.povHidden || []) object.visible = true;
   updateSurfaceViewButtons();
-  ui.hint.textContent = "Drag to orbit · pinch or scroll to zoom · right/middle-drag pivots";
+  ui.hint.textContent = "Camera: drag to orbit · scroll or pinch to zoom · Planet, Follow, or Cockpit";
   cameraControls.update();
 }
 
