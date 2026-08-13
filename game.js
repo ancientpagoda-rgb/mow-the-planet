@@ -811,7 +811,7 @@ function tryUnloadGrain(agent) {
   agent.target = null;
   if (agent === mower) autoTarget = null;
   const workerName = agent === mower ? "Founder" : agent.workerType === "trimmer" ? `Harvester ${agent.id}` : `Mower ${agent.id}`;
-  announceAttack(`${workerName} delivered ${milled.toFixed(1)} kg to the ${stronghold.mill ? "mill" : "granary"}`);
+  announceAttack(`${workerName} delivered ${milled.toFixed(1)} kg crop to the ${stronghold.mill ? "mill" : "granary"}`);
   return milled;
 }
 
@@ -1422,6 +1422,10 @@ function processVillageCouncil() {
   holdVillageElection();
 }
 
+function cellNeedsHarvest(index) {
+  return Boolean(cuttable[index] && (!cut[index] || cropStage[index] >= 3));
+}
+
 function cutGrass(mowingAgent = mower, emitParticles = true) {
   if (mowingAgent.disabledUntil > elapsed || Math.abs(mowingAgent.speed) < 8 * SPEED_SCALE || mowingAgent.battery <= 0 || grainHoldIsFull(mowingAgent)) return 0;
   const deckRadius = mowingAgent.deckRadius || DECK_RADIUS;
@@ -1437,37 +1441,51 @@ function cutGrass(mowingAgent = mower, emitParticles = true) {
   const minRow = Math.max(0, Math.floor((deckY - deckRadius) / CELL_H));
   const maxRow = Math.min(ROWS - 1, Math.ceil((deckY + deckRadius) / CELL_H));
   let newlyCut = 0;
+  let harvestedCropCells = 0;
 
   for (let row = minRow; row <= maxRow; row += 1) {
     for (let rawCol = minCol; rawCol <= maxCol; rawCol += 1) {
       const col = ((rawCol % COLS) + COLS) % COLS;
       const index = row * COLS + col;
-      if (!cuttable[index] || cut[index]) continue;
+      if (!cellNeedsHarvest(index)) continue;
       const x = (col + 0.5) * CELL_W;
       const y = (row + 0.5) * CELL_H;
-      if (Math.hypot(worldDeltaX(x, deckX), y - deckY) <= deckRadius) {
-        cut[index] = 1;
+      if (Math.hypot(worldDeltaX(x, deckX), y - deckY) > deckRadius) continue;
+
+      if (cut[index] && cropStage[index] >= 3) {
         cropStage[index] = 0;
         cropType[index] = 0;
-        cutCount += 1;
-        currentCutCount += 1;
-        newlyCut += 1;
+        harvestedCropCells += 1;
         unplantedHarvestCells.push(index);
         renderGrassCell(col, row, true);
+        continue;
       }
+
+      cut[index] = 1;
+      cropStage[index] = 0;
+      cropType[index] = 0;
+      cutCount += 1;
+      currentCutCount += 1;
+      newlyCut += 1;
+      unplantedHarvestCells.push(index);
+      renderGrassCell(col, row, true);
     }
   }
 
   if (newlyCut > 0) {
     mowingAgent.mowedCells = (mowingAgent.mowedCells || 0) + newlyCut;
     mowingAgent.reproductionProgress = (mowingAgent.reproductionProgress || 0) + newlyCut;
-    mowingAgent.grainCargoCells = (mowingAgent.grainCargoCells || 0) + newlyCut;
-    if (grainHoldIsFull(mowingAgent)) mowingAgent.returningToGranary = true;
     processWorkerLeveling(mowingAgent);
   }
 
-  if (emitParticles && newlyCut > 0 && particles.length < 90) {
-    for (let i = 0; i < Math.min(4, newlyCut); i += 1) {
+  if (harvestedCropCells > 0) {
+    mowingAgent.grainCargoCells = (mowingAgent.grainCargoCells || 0) + harvestedCropCells;
+    if (grainHoldIsFull(mowingAgent)) mowingAgent.returningToGranary = true;
+  }
+
+  if (emitParticles && (newlyCut > 0 || harvestedCropCells > 0) && particles.length < 90) {
+    const workedCells = newlyCut + harvestedCropCells;
+    for (let i = 0; i < Math.min(4, workedCells); i += 1) {
       particles.push({
         x: deckX + (Math.random() - 0.5) * 45,
         y: deckY + (Math.random() - 0.5) * 45,
@@ -1476,7 +1494,7 @@ function cutGrass(mowingAgent = mower, emitParticles = true) {
         life: 0.65 + Math.random() * 0.4,
       });
     }
-    if (mowingAgent === mower) mower.battery = Math.max(0, mower.battery - newlyCut * 0.00045);
+    if (mowingAgent === mower) mower.battery = Math.max(0, mower.battery - workedCells * 0.00045);
   }
   return newlyCut;
 }
@@ -1628,7 +1646,7 @@ function chooseAutoTarget() {
   for (let row = 0; row < ROWS; row += 1) {
     for (let col = 0; col < COLS; col += 1) {
       const index = row * COLS + col;
-      if (!cuttable[index] || cut[index]) continue;
+      if (!cellNeedsHarvest(index)) continue;
       const x = (col + 0.5) * CELL_W;
       const y = (row + 0.5) * CELL_H;
       const dx = worldDeltaX(x, mower.x);
@@ -1710,7 +1728,7 @@ function targetStillNeedsMowing(target) {
   const col = ((Math.floor(target.x / CELL_W) % COLS) + COLS) % COLS;
   const row = Math.max(0, Math.min(ROWS - 1, Math.floor(target.y / CELL_H)));
   const index = row * COLS + col;
-  return Boolean(cuttable[index] && !cut[index]);
+  return cellNeedsHarvest(index);
 }
 
 function chooseColonyTarget(agent) {
@@ -1725,7 +1743,7 @@ function chooseColonyTarget(agent) {
     const col = Math.floor(x / CELL_W);
     const row = Math.floor(y / CELL_H);
     const index = row * COLS + col;
-    if (!cuttable[index] || cut[index]) continue;
+    if (!cellNeedsHarvest(index)) continue;
     const distance = Math.hypot(worldDeltaX(x, agent.x), y - agent.y);
     const routePenalty = routeIsBlocked(agent.x, agent.y, x, y) ? 220 / SURFACE_SCALE : 0;
     const crowdPenalty = offspring.some((other) => other !== agent && other.target && Math.hypot(worldDeltaX(x, other.target.x), y - other.target.y) < 90) ? 90 : 0;
@@ -3121,7 +3139,7 @@ function updateUI() {
   const constructionProgress = villageWallLevel < MAX_VILLAGE_WALL_LEVEL
     ? `${Math.max(0, nextBuildCost - grainStoredKg).toFixed(1)} kg to wall ${villageWallLevel + 1}`
     : "village walls complete";
-  ui.clippings.textContent = `${grainStoredKg.toFixed(1)} kg stored · ${constructionProgress}`;
+  ui.clippings.textContent = `${grainStoredKg.toFixed(1)} kg crop stored · ${constructionProgress}`;
   ui.planetProgress.textContent = `${(completion * 100).toFixed(completionDigits)}% of planet`;
   const terrainSample = scientificWorld.sample(mower.x, mower.y);
   ui.terrainReadout.textContent = `${terrainSample.biome} · ${Math.round(terrainHeightAt(mower.x, mower.y))} m`;
@@ -3173,7 +3191,7 @@ function updateUI() {
   ui.nitro.classList.toggle("is-active", mower.boosting);
   ui.nitro.disabled = mower.disabledUntil > elapsed;
   const tractorUnlocked = mower.workerType === "tractor";
-  ui.tractorUpgrade.textContent = tractorUnlocked ? "TRACTOR ✓" : "TRACTOR · 5K";
+  ui.tractorUpgrade.textContent = tractorUnlocked ? "TRACTOR ✓" : "TRACTOR · 5,000 PTS";
   ui.tractorUpgrade.classList.toggle("is-unlocked", tractorUnlocked || scoreNow >= TRACTOR_COST);
   ui.tractorUpgrade.disabled = tractorUnlocked;
 
@@ -3199,7 +3217,7 @@ function updateUI() {
     ui.batteryLabel.textContent = "Battery";
     if (mower.battery <= 0) ui.status.textContent = "Emergency crawl · return to the shed";
     else if (autoMode && autoCharging) ui.status.textContent = "Auto · returning to charge";
-    else if (autoMode && mower.returningToGranary) ui.status.textContent = `Auto · hauling ${grainCargoKg(mower).toFixed(1)} kg to granary`;
+    else if (autoMode && mower.returningToGranary) ui.status.textContent = `Auto · hauling ${grainCargoKg(mower).toFixed(1)} kg crop to granary`;
     else if (autoMode) ui.status.textContent = "Auto · harvesting the next field";
     else if (Math.abs(mower.speed) > 8 * SPEED_SCALE) ui.status.textContent = cutCount ? "Harvester engaged" : "Crossing the field";
     else if (running) ui.status.textContent = "Engine idling";
