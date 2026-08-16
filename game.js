@@ -88,7 +88,7 @@ const FIRST_CASTLE_COST = 0.6;
 const CASTLE_FOUNDATION_COST = 1.5;
 const CASTLE_UPGRADE_COST = 2.5;
 const MAX_CASTLES = 1;
-const MAX_CASTLE_LEVEL = 3;
+const MAX_CASTLE_LEVEL = 7;
 const MAX_VILLAGE_WALL_LEVEL = 7;
 const MAX_VILLAGE_SKILL = 7;
 const MAX_STRONGHOLD_LEVEL = 7;
@@ -860,132 +860,195 @@ function castleSiteIsAvailable(x, y, siteRadius, nearGranary = false) {
 }
 
 function findCastleSite() {
-  const siteRadius = 38;
-  let best = null;
-  if (castles.length === 0) {
-    for (let ring = 60; ring <= 260; ring += 25) {
-      for (let step = 0; step < 36; step += 1) {
-        const angle = (step / 36) * Math.PI * 2 + seed * 0.0001;
-        const x = wrapX(granary.x + Math.cos(angle) * ring);
-        const y = Math.max(150, Math.min(FIELD_H - 150, granary.y + Math.sin(angle) * ring));
-        if (!castleSiteIsAvailable(x, y, siteRadius, true)) continue;
-        const sample = scientificWorld.sample(x, y);
-        const score = sample.relief * 4 - ring * 0.002 - sample.moisture * 0.15;
-        if (!best || score > best.score) best = { x, y, score };
-      }
-      if (best && ring >= 110) return best;
-    }
-    if (best) return best;
-  }
-  for (let attempt = 0; attempt < 360; attempt += 1) {
-    const cursor = attempt + castles.length * 811 + nextCastleId * 193;
-    const x = hash(cursor, 71, seed ^ 0x74a1b92d) * FIELD_W;
-    const y = 180 + hash(cursor, 137, seed ^ 0x5bd1e995) * (FIELD_H - 360);
-    if (!castleSiteIsAvailable(x, y, siteRadius)) continue;
-    const sample = scientificWorld.sample(x, y);
-    const score = sample.relief * 5 - sample.moisture * 0.25 + hash(cursor, 223, seed) * 0.35;
-    if (!best || score > best.score) best = { x, y, score };
-  }
-  return best;
+  // The first and only castle is the spawn citadel: the granary/charge-pad
+  // where the founder mower begins becomes the protected heart of the fort.
+  if (castles.length >= MAX_CASTLES) return null;
+  return { x: granary.x, y: granary.y, score: 1 };
 }
 
 function createCastleModel(castle) {
   const level = castle.level;
   const group = new THREE.Group();
-  group.name = `castle-${castle.id}-level-${level}`;
+  group.name = `spawn-citadel-level-${level}`;
   const frame = planetFrame(castle.x, castle.y);
   group.position.copy(frame.normal).multiplyScalar(PLANET_RADIUS + terrainHeightAt(castle.x, castle.y) + 3);
-  const basis = new THREE.Matrix4().makeBasis(
+  group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     frame.east,
     frame.normal,
     frame.east.clone().cross(frame.normal).normalize(),
-  );
-  group.quaternion.setFromRotationMatrix(basis);
-  group.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), castle.id * 1.17));
+  ));
 
-  const stoneColor = level === 1 ? 0x777369 : level === 2 ? 0x8d897d : 0xa39d8e;
-  const stone = new THREE.MeshStandardMaterial({ color: stoneColor, roughness: 0.94, metalness: 0.02 });
-  const darkStone = new THREE.MeshStandardMaterial({ color: 0x3c3a35, roughness: 0.9 });
+  const modelScale = 0.9;
+  const stonePalette = [0x716d63, 0x79756b, 0x817d72, 0x898477, 0x918b7c, 0x999282, 0xa29a89];
+  const bannerPalette = [0x9f3f31, 0xb14b34, 0xc06b36, 0xc89135, 0xa36d32, 0x7f4c8e, 0x6c3f87];
+  const stone = new THREE.MeshStandardMaterial({ color: stonePalette[level - 1], roughness: 0.95, metalness: 0.02 });
+  const darkStone = new THREE.MeshStandardMaterial({ color: 0x353631, roughness: 0.9, metalness: 0.08 });
+  const iron = new THREE.MeshStandardMaterial({ color: 0x222928, roughness: 0.48, metalness: 0.74 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x553824, roughness: 0.92 });
+  const archerDark = new THREE.MeshStandardMaterial({ color: 0x171b19, emissive: 0x090d0b, emissiveIntensity: 0.12, roughness: 1 });
   const bannerMaterial = new THREE.MeshStandardMaterial({
-    color: level === 1 ? 0xa84432 : level === 2 ? 0xd09b3f : 0x6e4f9e,
-    emissive: level === 3 ? 0x241433 : 0x2c1009,
-    emissiveIntensity: 0.18,
+    color: bannerPalette[level - 1],
+    emissive: 0x210b09,
+    emissiveIntensity: 0.16,
     roughness: 0.82,
     side: THREE.DoubleSide,
   });
-  const addMesh = (geometry, material, x, y, z) => {
+
+  const addMesh = (geometry, material, x, y, z, parent = group) => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    group.add(mesh);
+    parent.add(mesh);
     return mesh;
   };
-  const span = 176 + level * 20;
-  const half = span / 2;
-  const wallThickness = 17 + level * 2;
-  const wallHeight = 42 + level * 12;
-  const towerRadius = 24 + level * 3;
-  const towerHeight = wallHeight + 34 + level * 9;
-  addMesh(new THREE.CylinderGeometry(half * 0.94, half, 8, 20), darkStone, 0, 4, 0);
-  // One extruded frame makes the curtain wall a single continuous enclosure,
-  // instead of four separate slabs that can show seams at their corners.
-  const outerHalf = half + wallThickness / 2;
-  const innerHalf = half - wallThickness / 2;
-  const wallOutline = new THREE.Shape();
-  wallOutline.moveTo(-outerHalf, -outerHalf);
-  wallOutline.lineTo(outerHalf, -outerHalf);
-  wallOutline.lineTo(outerHalf, outerHalf);
-  wallOutline.lineTo(-outerHalf, outerHalf);
-  wallOutline.closePath();
-  const courtyard = new THREE.Path();
-  courtyard.moveTo(-innerHalf, -innerHalf);
-  courtyard.lineTo(-innerHalf, innerHalf);
-  courtyard.lineTo(innerHalf, innerHalf);
-  courtyard.lineTo(innerHalf, -innerHalf);
-  courtyard.closePath();
-  wallOutline.holes.push(courtyard);
-  const curtainWallGeometry = new THREE.ExtrudeGeometry(wallOutline, {
-    depth: wallHeight,
-    bevelEnabled: false,
-    curveSegments: 1,
-  });
-  curtainWallGeometry.rotateX(-Math.PI / 2);
-  addMesh(curtainWallGeometry, stone, 0, 0, 0);
-  for (const x of [-half, half]) {
-    for (const z of [-half, half]) {
-      addMesh(new THREE.CylinderGeometry(towerRadius * 1.08, towerRadius, towerHeight, 10), stone, x, towerHeight / 2, z);
-      const crown = addMesh(new THREE.TorusGeometry(towerRadius * 0.84, 5, 7, 20), darkStone, x, towerHeight - 2, z);
-      crown.rotation.x = Math.PI / 2;
-    }
+
+  // Leave the exact spawn/granary center as a courtyard so the mower can
+  // still drive and unload. The keep anchors the north-west side instead.
+  const keepSize = 72 + level * 5;
+  const keepHeight = 84 + level * 17;
+  const keepX = -98;
+  const keepZ = -82;
+  addMesh(new THREE.BoxGeometry(keepSize, keepHeight, keepSize), stone, keepX, keepHeight / 2, keepZ);
+  addMesh(new THREE.BoxGeometry(keepSize + 12, 8, keepSize + 12), darkStone, keepX, keepHeight + 2, keepZ);
+
+  const keepMerlon = 12;
+  for (let index = -2; index <= 2; index += 1) {
+    const along = index * (keepSize / 5);
+    addMesh(new THREE.BoxGeometry(keepMerlon, 14, 10), stone, keepX + along, keepHeight + 12, keepZ - keepSize / 2);
+    addMesh(new THREE.BoxGeometry(keepMerlon, 14, 10), stone, keepX + along, keepHeight + 12, keepZ + keepSize / 2);
+    addMesh(new THREE.BoxGeometry(10, 14, keepMerlon), stone, keepX - keepSize / 2, keepHeight + 12, keepZ + along);
+    addMesh(new THREE.BoxGeometry(10, 14, keepMerlon), stone, keepX + keepSize / 2, keepHeight + 12, keepZ + along);
   }
-  const keepHeight = 78 + level * 31;
-  const keepSize = 62 + level * 12;
-  addMesh(new THREE.BoxGeometry(keepSize, keepHeight, keepSize), stone, 0, keepHeight / 2, 0);
-  const gate = addMesh(new THREE.BoxGeometry(6, wallHeight * 0.68, 31), darkStone, outerHalf + 3, wallHeight * 0.34, 0);
-  gate.castShadow = false;
-  const battlementSize = 12 + level;
-  for (let slot = -3; slot <= 3; slot += 1) {
-    const along = slot * (span / 7.5);
-    addMesh(new THREE.BoxGeometry(battlementSize, 13, wallThickness + 6), stone, along, wallHeight + 6, -half);
-    addMesh(new THREE.BoxGeometry(battlementSize, 13, wallThickness + 6), stone, along, wallHeight + 6, half);
-    addMesh(new THREE.BoxGeometry(wallThickness + 6, 13, battlementSize), stone, -half, wallHeight + 6, along);
-    addMesh(new THREE.BoxGeometry(wallThickness + 6, 13, battlementSize), stone, half, wallHeight + 6, along);
-  }
-  addMesh(new THREE.CylinderGeometry(2.6, 3.2, 72, 8), darkStone, 0, keepHeight + 36, 0);
+
+  const flagPole = addMesh(new THREE.CylinderGeometry(2.4, 3, 82, 8), darkStone, keepX, keepHeight + 45, keepZ);
+  flagPole.castShadow = false;
   const flagShape = new THREE.Shape();
   flagShape.moveTo(0, 0);
-  flagShape.lineTo(38 + level * 6, 10);
-  flagShape.lineTo(0, 22);
+  flagShape.lineTo(44 + level * 4, 9);
+  flagShape.lineTo(0, 23);
   flagShape.closePath();
-  const flag = addMesh(new THREE.ShapeGeometry(flagShape), bannerMaterial, 2, keepHeight + 52, 0);
+  const flag = addMesh(new THREE.ShapeGeometry(flagShape), bannerMaterial, keepX + 3, keepHeight + 60, keepZ);
   flag.rotation.y = Math.PI / 2;
+
+  const ringRadii = [170];
+  if (level >= 4) ringRadii.push(305);
+  if (level >= 6) ringRadii.push(455);
+  group.userData.ringRadii = ringRadii.slice();
+  group.userData.portcullises = [];
+
+  const addCrenellations = (radius, wallHeight, wallThickness, gateHalfWidth, ringIndex) => {
+    const count = MOBILE_RENDERING ? 7 : 11;
+    const merlonWidth = 15 + ringIndex * 2;
+    const inset = 4;
+    for (let index = 0; index < count; index += 1) {
+      const t = -radius + 20 + index * ((radius * 2 - 40) / Math.max(1, count - 1));
+      addMesh(new THREE.BoxGeometry(merlonWidth, 15, wallThickness + 7), stone, t, wallHeight + 7, -radius + inset);
+      addMesh(new THREE.BoxGeometry(merlonWidth, 15, wallThickness + 7), stone, t, wallHeight + 7, radius - inset);
+      addMesh(new THREE.BoxGeometry(wallThickness + 7, 15, merlonWidth), stone, -radius + inset, wallHeight + 7, t);
+      if (Math.abs(t) > gateHalfWidth + 14) {
+        addMesh(new THREE.BoxGeometry(wallThickness + 7, 15, merlonWidth), stone, radius - inset, wallHeight + 7, t);
+      }
+    }
+  };
+
+  const addTower = (x, z, wallHeight, ringIndex, outwardX = 0, outwardZ = 0) => {
+    const towerRadius = 25 + level * 1.5 + ringIndex * 3;
+    const towerHeight = wallHeight + 30 + Math.max(0, 2 - ringIndex) * 8 + level * 2;
+    addMesh(new THREE.CylinderGeometry(towerRadius * 1.03, towerRadius * 1.11, towerHeight, 10), stone, x, towerHeight / 2, z);
+    const crown = addMesh(new THREE.CylinderGeometry(towerRadius * 1.24, towerRadius * 1.14, 11, 10), darkStone, x, towerHeight + 2, z);
+    crown.castShadow = true;
+    if (level >= 2) {
+      const slitY = towerHeight * 0.62;
+      const sx = outwardX || Math.sign(x);
+      const sz = outwardZ || Math.sign(z);
+      const slitX = x + sx * (towerRadius + 0.8);
+      const slitZ = z + sz * (towerRadius + 0.8);
+      const slit = addMesh(new THREE.BoxGeometry(sz ? 8 : 2.5, 18, sx ? 8 : 2.5), archerDark, slitX, slitY, slitZ);
+      slit.castShadow = false;
+    }
+    return towerHeight;
+  };
+
+  const addPortcullis = (radius, wallHeight, gateHalfWidth, wallThickness, ringIndex) => {
+    const gateGroup = new THREE.Group();
+    gateGroup.name = `portcullis-ring-${ringIndex + 1}`;
+    gateGroup.position.set(radius + wallThickness * 0.05, 0, 0);
+    const gateHeight = Math.max(42, wallHeight * 0.72);
+    const barCount = MOBILE_RENDERING ? 7 : 9;
+    for (let index = 0; index < barCount; index += 1) {
+      const z = -gateHalfWidth + (index / Math.max(1, barCount - 1)) * gateHalfWidth * 2;
+      const bar = addMesh(new THREE.BoxGeometry(3.3, gateHeight, 3.3), iron, 0, gateHeight / 2, z, gateGroup);
+      bar.castShadow = false;
+    }
+    for (const y of [gateHeight * 0.34, gateHeight * 0.67]) {
+      const brace = addMesh(new THREE.BoxGeometry(3.8, 3.8, gateHalfWidth * 2 + 8), iron, 0, y, 0, gateGroup);
+      brace.castShadow = false;
+    }
+    gateGroup.userData.closedY = 0;
+    gateGroup.userData.openY = gateHeight * 0.86;
+    gateGroup.userData.openAmount = 0;
+    group.add(gateGroup);
+    group.userData.portcullises.push(gateGroup);
+  };
+
+  ringRadii.forEach((radius, ringIndex) => {
+    const wallHeight = 54 + level * 7 - ringIndex * 5;
+    const wallThickness = 16 + level * 1.5 + ringIndex * 2;
+    const gateHalfWidth = 42 + level * 2 + ringIndex * 4;
+    const west = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, radius * 2), stone, -radius, wallHeight / 2, 0);
+    const north = addMesh(new THREE.BoxGeometry(radius * 2, wallHeight, wallThickness), stone, 0, wallHeight / 2, -radius);
+    const south = addMesh(new THREE.BoxGeometry(radius * 2, wallHeight, wallThickness), stone, 0, wallHeight / 2, radius);
+    const eastSegmentLength = radius - gateHalfWidth;
+    const eastA = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, eastSegmentLength), stone, radius, wallHeight / 2, -(gateHalfWidth + eastSegmentLength / 2));
+    const eastB = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, eastSegmentLength), stone, radius, wallHeight / 2, gateHalfWidth + eastSegmentLength / 2);
+    [west, north, south, eastA, eastB].forEach((wall) => { wall.receiveShadow = true; });
+
+    addCrenellations(radius, wallHeight, wallThickness, gateHalfWidth, ringIndex);
+    addTower(-radius, -radius, wallHeight, ringIndex, -1, -1);
+    addTower(-radius, radius, wallHeight, ringIndex, -1, 1);
+    addTower(radius, -radius, wallHeight, ringIndex, 1, -1);
+    addTower(radius, radius, wallHeight, ringIndex, 1, 1);
+
+    const gateTowerZ = gateHalfWidth + 26 + ringIndex * 3;
+    const gateTowerHeight = Math.max(
+      addTower(radius, -gateTowerZ, wallHeight + 8, ringIndex, 1, 0),
+      addTower(radius, gateTowerZ, wallHeight + 8, ringIndex, 1, 0),
+    );
+    addMesh(new THREE.BoxGeometry(wallThickness + 12, 18, gateTowerZ * 2 - 30), darkStone, radius, wallHeight + 18, 0);
+    addPortcullis(radius, wallHeight, gateHalfWidth, wallThickness, ringIndex);
+
+    if (level >= 5 && ringIndex > 0) {
+      addTower(0, -radius, wallHeight, ringIndex, 0, -1);
+      addTower(0, radius, wallHeight, ringIndex, 0, 1);
+      addTower(-radius, 0, wallHeight, ringIndex, -1, 0);
+    }
+    if (level >= 7 && ringIndex === ringRadii.length - 1) {
+      const barbicanX = radius + 72;
+      addTower(barbicanX, -gateTowerZ * 0.72, wallHeight - 4, ringIndex, 1, 0);
+      addTower(barbicanX, gateTowerZ * 0.72, wallHeight - 4, ringIndex, 1, 0);
+      addMesh(new THREE.BoxGeometry(72, 12, gateTowerZ * 1.25), darkStone, radius + 36, 9, 0);
+    }
+  });
+
+  if (level >= 2) {
+    const archerCount = MOBILE_RENDERING ? 4 + level : 6 + level * 2;
+    const outerRadius = ringRadii[ringRadii.length - 1];
+    for (let index = 0; index < archerCount; index += 1) {
+      const angle = (index / archerCount) * Math.PI * 2;
+      const radius = outerRadius - 18;
+      const post = addMesh(new THREE.CylinderGeometry(2.1, 2.3, 18, 6), wood, Math.cos(angle) * radius, 62 + level * 5, Math.sin(angle) * radius);
+      post.castShadow = false;
+    }
+  }
+
+  // A roc nest remains on the oldest inner tower as a visual callback to
+  // the existing anti-dragon system.
   const nestMaterial = new THREE.MeshStandardMaterial({ color: 0x594128, roughness: 1, side: THREE.DoubleSide });
-  const nest = addMesh(new THREE.TorusGeometry(25 + level * 2, 7, 7, 22), nestMaterial, -half, towerHeight + 8, -half);
+  const nest = addMesh(new THREE.TorusGeometry(27 + level, 7, 7, 22), nestMaterial, -170, 108 + level * 8, -170);
   nest.rotation.x = Math.PI / 2;
-  const nestBed = addMesh(new THREE.CylinderGeometry(20 + level * 2, 16, 5, 18), nestMaterial, -half, towerHeight + 5, -half);
-  nestBed.castShadow = false;
-  group.scale.setScalar(0.82);
+
+  group.scale.setScalar(modelScale);
   return group;
 }
 
@@ -1009,7 +1072,7 @@ function foundCastle() {
     x: site.x,
     y: site.y,
     level: 1,
-    collision: { kind: "circle", id: "castle", x: site.x, y: site.y, r: 31 },
+    collision: { kind: "circle", id: "castle-keep", x: wrapX(site.x - 16), y: site.y - 13, r: 9 },
   };
   castle.model = createCastleModel(castle);
   castle.marker = createCastleMarker(castle);
@@ -1030,6 +1093,7 @@ function upgradeCastle(castle) {
   if (grainStoredKg < cost || castle.level >= MAX_CASTLE_LEVEL) return false;
   grainStoredKg -= cost;
   castle.level += 1;
+  castle.collision.r = 9 + castle.level * 0.8;
   castle.model?.removeFromParent();
   castle.model?.traverse((object) => {
     object.geometry?.dispose?.();
@@ -1326,6 +1390,13 @@ function councilCitizens() {
 
 function councilProposals() {
   const proposals = [];
+  if (!castles.length) {
+    proposals.push({ key: "castle", label: "Spawn citadel 1", cost: FIRST_CASTLE_COST, execute: () => foundCastle() });
+  } else if (castles[0].level < MAX_CASTLE_LEVEL) {
+    const castle = castles[0];
+    const cost = CASTLE_UPGRADE_COST * castle.level;
+    proposals.push({ key: "castle", label: `Spawn citadel ${castle.level + 1}`, cost, execute: () => upgradeCastle(castle) });
+  }
   if (villageWallLevel < MAX_VILLAGE_WALL_LEVEL) {
     proposals.push({ key: "walls", label: `Village walls ${villageWallLevel + 1}`, ...villageWallResourceCost(), execute: () => expandVillageWalls() });
   }
@@ -1356,6 +1427,7 @@ function councilProposals() {
 
 function workerProposalAffinity(worker, proposal) {
   let affinity = hash(worker.id * 97 + councilRound, proposal.key.length * 211, seed ^ 0x62d4b91f) * 1.8;
+  if (proposal.key === "castle") affinity += 2.3 + dragons.length * 0.22 + villageSkills.defense * 0.12;
   if (worker.workerType === "planter" && proposal.key === "agriculture") affinity += 3.4;
   if (worker.workerType === "planter" && proposal.key === "mill") affinity += 3.8;
   if (["mower", "tractor"].includes(worker.workerType) && proposal.key === "machinery") affinity += 2.8;
@@ -2589,6 +2661,66 @@ function eatMower(agent, dragon) {
   }
 }
 
+function castleOuterRadiusField(castle) {
+  const radiusWorld = castle.level >= 6 ? 455 : castle.level >= 4 ? 305 : 170;
+  return radiusWorld * 0.9 / SURFACE_SCALE;
+}
+
+function updateCastlePortcullises(dt) {
+  if (!castles.length) return;
+  const workers = [mower, ...offspring];
+  for (const castle of castles) {
+    const ringRadii = castle.model?.userData?.ringRadii || [170];
+    const fieldRadii = ringRadii.map((radius) => radius * 0.9 / SURFACE_SCALE);
+    const shouldOpen = workers.some((worker) => {
+      if (!worker || worker.disabledUntil > elapsed) return false;
+      const dx = worldDeltaX(worker.x, castle.x);
+      const dy = worker.y - castle.y;
+      if (Math.abs(dy) > 20) return false;
+      return fieldRadii.some((radius) => Math.abs(dx - radius) < 31);
+    });
+    castle.gateOpen = shouldOpen;
+    for (const portcullis of castle.model?.userData?.portcullises || []) {
+      const target = shouldOpen ? 1 : 0;
+      const current = portcullis.userData.openAmount || 0;
+      const speed = shouldOpen ? 3.2 : 1.7;
+      const next = current + (target - current) * Math.min(1, dt * speed);
+      portcullis.userData.openAmount = next;
+      const eased = next * next * (3 - 2 * next);
+      portcullis.position.y = THREE.MathUtils.lerp(portcullis.userData.closedY, portcullis.userData.openY, eased);
+    }
+  }
+}
+
+function updateCastleDragonDefenses(dt) {
+  if (!castles.length || !dragons.length) return;
+  for (const castle of castles) {
+    if (castle.level < 2) continue;
+    castle.nextDefenseShotAt ||= elapsed + 0.6;
+    if (elapsed < castle.nextDefenseShotAt) continue;
+    const range = 82 + castle.level * 19 + villageSkills.defense * 5;
+    const target = dragons.reduce((best, dragon) => {
+      const distance = Math.hypot(worldDeltaX(dragon.x, castle.x), dragon.y - castle.y);
+      if (distance > range) return best;
+      return !best || distance < best.distance ? { dragon, distance } : best;
+    }, null)?.dragon;
+    if (!target) continue;
+
+    const cadence = Math.max(0.52, 2.55 - castle.level * 0.22 - villageSkills.defense * 0.08);
+    castle.nextDefenseShotAt = elapsed + cadence;
+    const impact = 0.9 + castle.level * 0.38 + villageSkills.defense * 0.16;
+    target.castleDefenseDamage = (target.castleDefenseDamage || 0) + impact;
+    target.fireCooldownUntil = Math.max(target.fireCooldownUntil || 0, elapsed + 0.45);
+    target.bank += (hash(target.id, castle.level, seed) - 0.5) * 0.2;
+    const durability = 7 + (target.generation || 1) * 1.7;
+    if (target.castleDefenseDamage < durability) continue;
+    const dragonId = target.id;
+    if (removeDragon(target)) {
+      announceAttack(`Castle level ${castle.level} archers brought down dragon ${dragonId}`);
+    }
+  }
+}
+
 function updateDragons(dt) {
   for (const dragon of dragons) {
     dragon.age = (dragon.age || 0) + dt;
@@ -2977,6 +3109,7 @@ function update(dt) {
   }
 
   elapsed += dt;
+  updateCastlePortcullises(dt);
   updateTrees(dt);
   updateGrassRegrowth();
   tryUnloadGrain(mower);
@@ -3063,6 +3196,7 @@ function update(dt) {
   let newlyCut = cutGrass();
   for (const child of offspring) newlyCut += updateColonyAgent(child, dt);
   updateDragons(dt);
+  updateCastleDragonDefenses(dt);
   updateRocs(dt);
   updateApexCat(dt);
   updateBarbarianVillage(dt);
@@ -3118,7 +3252,7 @@ function finishJob() {
   const treasuryScore = silverCoins * 25 + goldCoins * 3000;
   const finalScore = Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + treesTrimmed * 180 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent - elapsed * 2));
   ui.finishScore.textContent = `${finalScore.toLocaleString()} pts`;
-  ui.finishDetail.textContent = `${formatTime(elapsed)} · castle ${castles.length} · walls level ${villageWallLevel} · ${goldCoins} gold · ${silverCoins} silver · cat ate ${creaturesEatenByCat} creatures`;
+  ui.finishDetail.textContent = `${formatTime(elapsed)} · castle level ${castles[0]?.level || 0} · walls level ${villageWallLevel} · ${goldCoins} gold · ${silverCoins} silver · cat ate ${creaturesEatenByCat} creatures`;
   ui.status.textContent = `Planet mastered · ${finalScore.toLocaleString()} points`;
 }
 
@@ -3176,7 +3310,7 @@ function updateUI() {
   const trees = obstacles.filter((shape) => shape.id === "tree");
   const youngestTreeLevel = trees.reduce((youngest, tree) => Math.min(youngest, tree.growthLevel ?? TREE_GROW_LEVELS), TREE_GROW_LEVELS);
   ui.councilStatus.textContent = lastCouncilResult;
-  ui.councilSkills.textContent = `Walls ${villageWallLevel}/7 · Farm ${villageSkills.agriculture} · Machines ${villageSkills.machinery} · Forest ${villageSkills.forestry} · Defense ${villageSkills.defense} · Tree ${youngestTreeLevel}/77`;
+  ui.councilSkills.textContent = `Castle ${castles[0]?.level || 0}/7 · Walls ${villageWallLevel}/7 · Farm ${villageSkills.agriculture} · Machines ${villageSkills.machinery} · Forest ${villageSkills.forestry} · Defense ${villageSkills.defense} · Tree ${youngestTreeLevel}/77`;
   ui.councilBallot.textContent = lastBallot || `Next ballot in ${Math.max(0, Math.ceil(nextCouncilAt - elapsed))}s`;
   ui.stockpileStatus.textContent = `${grainStoredKg.toFixed(1)} grain · ${timberStock.toFixed(1)} timber · ${stoneStock.toFixed(1)} stone`;
   ui.buildingStatus.textContent = `House L${stronghold.housing} · Mill L${stronghold.mill} · Smith L${stronghold.smithy} · Yard L${stronghold.lumberyard} · Tower L${stronghold.guardTower}`;
