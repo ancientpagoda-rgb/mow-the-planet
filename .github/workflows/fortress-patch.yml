@@ -1,0 +1,368 @@
+name: Apply progressive spawn fortress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fortress-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-fortress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build progressive spawn fortress
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("game.js")
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              if old not in text:
+                  raise SystemExit(f"missing patch target: {label}")
+              text = text.replace(old, new, 1)
+
+          replace_once("const MAX_CASTLE_LEVEL = 3;", "const MAX_CASTLE_LEVEL = 7;", "castle level cap")
+
+          start = text.index("function findCastleSite() {")
+          end = text.index("\nfunction createCastleModel(castle) {", start)
+          text = text[:start] + '''function findCastleSite() {
+            // The first and only castle is the spawn citadel: the granary/charge-pad
+            // where the founder mower begins becomes the protected heart of the fort.
+            if (castles.length >= MAX_CASTLES) return null;
+            return { x: granary.x, y: granary.y, score: 1 };
+          }
+          ''' + text[end:]
+
+          start = text.index("function createCastleModel(castle) {")
+          end = text.index("\nfunction createCastleMarker(castle) {", start)
+          castle_model = r'''function createCastleModel(castle) {
+            const level = castle.level;
+            const group = new THREE.Group();
+            group.name = `spawn-citadel-level-${level}`;
+            const frame = planetFrame(castle.x, castle.y);
+            group.position.copy(frame.normal).multiplyScalar(PLANET_RADIUS + terrainHeightAt(castle.x, castle.y) + 3);
+            group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+              frame.east,
+              frame.normal,
+              frame.east.clone().cross(frame.normal).normalize(),
+            ));
+
+            const modelScale = 0.9;
+            const stonePalette = [0x716d63, 0x79756b, 0x817d72, 0x898477, 0x918b7c, 0x999282, 0xa29a89];
+            const bannerPalette = [0x9f3f31, 0xb14b34, 0xc06b36, 0xc89135, 0xa36d32, 0x7f4c8e, 0x6c3f87];
+            const stone = new THREE.MeshStandardMaterial({ color: stonePalette[level - 1], roughness: 0.95, metalness: 0.02 });
+            const darkStone = new THREE.MeshStandardMaterial({ color: 0x353631, roughness: 0.9, metalness: 0.08 });
+            const iron = new THREE.MeshStandardMaterial({ color: 0x222928, roughness: 0.48, metalness: 0.74 });
+            const wood = new THREE.MeshStandardMaterial({ color: 0x553824, roughness: 0.92 });
+            const archerDark = new THREE.MeshStandardMaterial({ color: 0x171b19, emissive: 0x090d0b, emissiveIntensity: 0.12, roughness: 1 });
+            const bannerMaterial = new THREE.MeshStandardMaterial({
+              color: bannerPalette[level - 1],
+              emissive: 0x210b09,
+              emissiveIntensity: 0.16,
+              roughness: 0.82,
+              side: THREE.DoubleSide,
+            });
+
+            const addMesh = (geometry, material, x, y, z, parent = group) => {
+              const mesh = new THREE.Mesh(geometry, material);
+              mesh.position.set(x, y, z);
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              parent.add(mesh);
+              return mesh;
+            };
+
+            // Leave the exact spawn/granary center as a courtyard so the mower can
+            // still drive and unload. The keep anchors the north-west side instead.
+            const keepSize = 72 + level * 5;
+            const keepHeight = 84 + level * 17;
+            const keepX = -98;
+            const keepZ = -82;
+            addMesh(new THREE.BoxGeometry(keepSize, keepHeight, keepSize), stone, keepX, keepHeight / 2, keepZ);
+            addMesh(new THREE.BoxGeometry(keepSize + 12, 8, keepSize + 12), darkStone, keepX, keepHeight + 2, keepZ);
+
+            const keepMerlon = 12;
+            for (let index = -2; index <= 2; index += 1) {
+              const along = index * (keepSize / 5);
+              addMesh(new THREE.BoxGeometry(keepMerlon, 14, 10), stone, keepX + along, keepHeight + 12, keepZ - keepSize / 2);
+              addMesh(new THREE.BoxGeometry(keepMerlon, 14, 10), stone, keepX + along, keepHeight + 12, keepZ + keepSize / 2);
+              addMesh(new THREE.BoxGeometry(10, 14, keepMerlon), stone, keepX - keepSize / 2, keepHeight + 12, keepZ + along);
+              addMesh(new THREE.BoxGeometry(10, 14, keepMerlon), stone, keepX + keepSize / 2, keepHeight + 12, keepZ + along);
+            }
+
+            const flagPole = addMesh(new THREE.CylinderGeometry(2.4, 3, 82, 8), darkStone, keepX, keepHeight + 45, keepZ);
+            flagPole.castShadow = false;
+            const flagShape = new THREE.Shape();
+            flagShape.moveTo(0, 0);
+            flagShape.lineTo(44 + level * 4, 9);
+            flagShape.lineTo(0, 23);
+            flagShape.closePath();
+            const flag = addMesh(new THREE.ShapeGeometry(flagShape), bannerMaterial, keepX + 3, keepHeight + 60, keepZ);
+            flag.rotation.y = Math.PI / 2;
+
+            const ringRadii = [170];
+            if (level >= 4) ringRadii.push(305);
+            if (level >= 6) ringRadii.push(455);
+            group.userData.ringRadii = ringRadii.slice();
+            group.userData.portcullises = [];
+
+            const addCrenellations = (radius, wallHeight, wallThickness, gateHalfWidth, ringIndex) => {
+              const count = MOBILE_RENDERING ? 7 : 11;
+              const merlonWidth = 15 + ringIndex * 2;
+              const inset = 4;
+              for (let index = 0; index < count; index += 1) {
+                const t = -radius + 20 + index * ((radius * 2 - 40) / Math.max(1, count - 1));
+                addMesh(new THREE.BoxGeometry(merlonWidth, 15, wallThickness + 7), stone, t, wallHeight + 7, -radius + inset);
+                addMesh(new THREE.BoxGeometry(merlonWidth, 15, wallThickness + 7), stone, t, wallHeight + 7, radius - inset);
+                addMesh(new THREE.BoxGeometry(wallThickness + 7, 15, merlonWidth), stone, -radius + inset, wallHeight + 7, t);
+                if (Math.abs(t) > gateHalfWidth + 14) {
+                  addMesh(new THREE.BoxGeometry(wallThickness + 7, 15, merlonWidth), stone, radius - inset, wallHeight + 7, t);
+                }
+              }
+            };
+
+            const addTower = (x, z, wallHeight, ringIndex, outwardX = 0, outwardZ = 0) => {
+              const towerRadius = 25 + level * 1.5 + ringIndex * 3;
+              const towerHeight = wallHeight + 30 + Math.max(0, 2 - ringIndex) * 8 + level * 2;
+              addMesh(new THREE.CylinderGeometry(towerRadius * 1.03, towerRadius * 1.11, towerHeight, 10), stone, x, towerHeight / 2, z);
+              const crown = addMesh(new THREE.CylinderGeometry(towerRadius * 1.24, towerRadius * 1.14, 11, 10), darkStone, x, towerHeight + 2, z);
+              crown.castShadow = true;
+              if (level >= 2) {
+                const slitY = towerHeight * 0.62;
+                const sx = outwardX || Math.sign(x);
+                const sz = outwardZ || Math.sign(z);
+                const slitX = x + sx * (towerRadius + 0.8);
+                const slitZ = z + sz * (towerRadius + 0.8);
+                const slit = addMesh(new THREE.BoxGeometry(sz ? 8 : 2.5, 18, sx ? 8 : 2.5), archerDark, slitX, slitY, slitZ);
+                slit.castShadow = false;
+              }
+              return towerHeight;
+            };
+
+            const addPortcullis = (radius, wallHeight, gateHalfWidth, wallThickness, ringIndex) => {
+              const gateGroup = new THREE.Group();
+              gateGroup.name = `portcullis-ring-${ringIndex + 1}`;
+              gateGroup.position.set(radius + wallThickness * 0.05, 0, 0);
+              const gateHeight = Math.max(42, wallHeight * 0.72);
+              const barCount = MOBILE_RENDERING ? 7 : 9;
+              for (let index = 0; index < barCount; index += 1) {
+                const z = -gateHalfWidth + (index / Math.max(1, barCount - 1)) * gateHalfWidth * 2;
+                const bar = addMesh(new THREE.BoxGeometry(3.3, gateHeight, 3.3), iron, 0, gateHeight / 2, z, gateGroup);
+                bar.castShadow = false;
+              }
+              for (const y of [gateHeight * 0.34, gateHeight * 0.67]) {
+                const brace = addMesh(new THREE.BoxGeometry(3.8, 3.8, gateHalfWidth * 2 + 8), iron, 0, y, 0, gateGroup);
+                brace.castShadow = false;
+              }
+              gateGroup.userData.closedY = 0;
+              gateGroup.userData.openY = gateHeight * 0.86;
+              gateGroup.userData.openAmount = 0;
+              group.add(gateGroup);
+              group.userData.portcullises.push(gateGroup);
+            };
+
+            ringRadii.forEach((radius, ringIndex) => {
+              const wallHeight = 54 + level * 7 - ringIndex * 5;
+              const wallThickness = 16 + level * 1.5 + ringIndex * 2;
+              const gateHalfWidth = 42 + level * 2 + ringIndex * 4;
+              const west = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, radius * 2), stone, -radius, wallHeight / 2, 0);
+              const north = addMesh(new THREE.BoxGeometry(radius * 2, wallHeight, wallThickness), stone, 0, wallHeight / 2, -radius);
+              const south = addMesh(new THREE.BoxGeometry(radius * 2, wallHeight, wallThickness), stone, 0, wallHeight / 2, radius);
+              const eastSegmentLength = radius - gateHalfWidth;
+              const eastA = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, eastSegmentLength), stone, radius, wallHeight / 2, -(gateHalfWidth + eastSegmentLength / 2));
+              const eastB = addMesh(new THREE.BoxGeometry(wallThickness, wallHeight, eastSegmentLength), stone, radius, wallHeight / 2, gateHalfWidth + eastSegmentLength / 2);
+              [west, north, south, eastA, eastB].forEach((wall) => { wall.receiveShadow = true; });
+
+              addCrenellations(radius, wallHeight, wallThickness, gateHalfWidth, ringIndex);
+              addTower(-radius, -radius, wallHeight, ringIndex, -1, -1);
+              addTower(-radius, radius, wallHeight, ringIndex, -1, 1);
+              addTower(radius, -radius, wallHeight, ringIndex, 1, -1);
+              addTower(radius, radius, wallHeight, ringIndex, 1, 1);
+
+              const gateTowerZ = gateHalfWidth + 26 + ringIndex * 3;
+              const gateTowerHeight = Math.max(
+                addTower(radius, -gateTowerZ, wallHeight + 8, ringIndex, 1, 0),
+                addTower(radius, gateTowerZ, wallHeight + 8, ringIndex, 1, 0),
+              );
+              addMesh(new THREE.BoxGeometry(wallThickness + 12, 18, gateTowerZ * 2 - 30), darkStone, radius, wallHeight + 18, 0);
+              addPortcullis(radius, wallHeight, gateHalfWidth, wallThickness, ringIndex);
+
+              if (level >= 5 && ringIndex > 0) {
+                addTower(0, -radius, wallHeight, ringIndex, 0, -1);
+                addTower(0, radius, wallHeight, ringIndex, 0, 1);
+                addTower(-radius, 0, wallHeight, ringIndex, -1, 0);
+              }
+              if (level >= 7 && ringIndex === ringRadii.length - 1) {
+                const barbicanX = radius + 72;
+                addTower(barbicanX, -gateTowerZ * 0.72, wallHeight - 4, ringIndex, 1, 0);
+                addTower(barbicanX, gateTowerZ * 0.72, wallHeight - 4, ringIndex, 1, 0);
+                addMesh(new THREE.BoxGeometry(72, 12, gateTowerZ * 1.25), darkStone, radius + 36, 9, 0);
+              }
+            });
+
+            if (level >= 2) {
+              const archerCount = MOBILE_RENDERING ? 4 + level : 6 + level * 2;
+              const outerRadius = ringRadii[ringRadii.length - 1];
+              for (let index = 0; index < archerCount; index += 1) {
+                const angle = (index / archerCount) * Math.PI * 2;
+                const radius = outerRadius - 18;
+                const post = addMesh(new THREE.CylinderGeometry(2.1, 2.3, 18, 6), wood, Math.cos(angle) * radius, 62 + level * 5, Math.sin(angle) * radius);
+                post.castShadow = false;
+              }
+            }
+
+            // A roc nest remains on the oldest inner tower as a visual callback to
+            // the existing anti-dragon system.
+            const nestMaterial = new THREE.MeshStandardMaterial({ color: 0x594128, roughness: 1, side: THREE.DoubleSide });
+            const nest = addMesh(new THREE.TorusGeometry(27 + level, 7, 7, 22), nestMaterial, -170, 108 + level * 8, -170);
+            nest.rotation.x = Math.PI / 2;
+
+            group.scale.setScalar(modelScale);
+            return group;
+          }
+          '''
+          text = text[:start] + castle_model + text[end:]
+
+          replace_once(
+              'collision: { kind: "circle", id: "castle", x: site.x, y: site.y, r: 31 },',
+              'collision: { kind: "circle", id: "castle-keep", x: wrapX(site.x - 16), y: site.y - 13, r: 9 },',
+              "castle collision",
+          )
+
+          replace_once(
+              'castle.level += 1;\n  castle.model?.removeFromParent();',
+              'castle.level += 1;\n  castle.collision.r = 9 + castle.level * 0.8;\n  castle.model?.removeFromParent();',
+              "castle upgrade collision",
+          )
+
+          replace_once(
+              'function councilProposals() {\n  const proposals = [];',
+              '''function councilProposals() {
+            const proposals = [];
+            if (!castles.length) {
+              proposals.push({ key: "castle", label: "Spawn citadel 1", cost: FIRST_CASTLE_COST, execute: () => foundCastle() });
+            } else if (castles[0].level < MAX_CASTLE_LEVEL) {
+              const castle = castles[0];
+              const cost = CASTLE_UPGRADE_COST * castle.level;
+              proposals.push({ key: "castle", label: `Spawn citadel ${castle.level + 1}`, cost, execute: () => upgradeCastle(castle) });
+            }''',
+              "council castle proposals",
+          )
+
+          replace_once(
+              'let affinity = hash(worker.id * 97 + councilRound, proposal.key.length * 211, seed ^ 0x62d4b91f) * 1.8;',
+              '''let affinity = hash(worker.id * 97 + councilRound, proposal.key.length * 211, seed ^ 0x62d4b91f) * 1.8;
+            if (proposal.key === "castle") affinity += 2.3 + dragons.length * 0.22 + villageSkills.defense * 0.12;''',
+              "castle voting affinity",
+          )
+
+          insert_at = text.index("function updateDragons(dt) {")
+          defense_code = r'''function castleOuterRadiusField(castle) {
+            const radiusWorld = castle.level >= 6 ? 455 : castle.level >= 4 ? 305 : 170;
+            return radiusWorld * 0.9 / SURFACE_SCALE;
+          }
+
+          function updateCastlePortcullises(dt) {
+            if (!castles.length) return;
+            const workers = [mower, ...offspring];
+            for (const castle of castles) {
+              const ringRadii = castle.model?.userData?.ringRadii || [170];
+              const fieldRadii = ringRadii.map((radius) => radius * 0.9 / SURFACE_SCALE);
+              const shouldOpen = workers.some((worker) => {
+                if (!worker || worker.disabledUntil > elapsed) return false;
+                const dx = worldDeltaX(worker.x, castle.x);
+                const dy = worker.y - castle.y;
+                if (Math.abs(dy) > 20) return false;
+                return fieldRadii.some((radius) => Math.abs(dx - radius) < 31);
+              });
+              castle.gateOpen = shouldOpen;
+              for (const portcullis of castle.model?.userData?.portcullises || []) {
+                const target = shouldOpen ? 1 : 0;
+                const current = portcullis.userData.openAmount || 0;
+                const speed = shouldOpen ? 3.2 : 1.7;
+                const next = current + (target - current) * Math.min(1, dt * speed);
+                portcullis.userData.openAmount = next;
+                const eased = next * next * (3 - 2 * next);
+                portcullis.position.y = THREE.MathUtils.lerp(portcullis.userData.closedY, portcullis.userData.openY, eased);
+              }
+            }
+          }
+
+          function updateCastleDragonDefenses(dt) {
+            if (!castles.length || !dragons.length) return;
+            for (const castle of castles) {
+              if (castle.level < 2) continue;
+              castle.nextDefenseShotAt ||= elapsed + 0.6;
+              if (elapsed < castle.nextDefenseShotAt) continue;
+              const range = 82 + castle.level * 19 + villageSkills.defense * 5;
+              const target = dragons.reduce((best, dragon) => {
+                const distance = Math.hypot(worldDeltaX(dragon.x, castle.x), dragon.y - castle.y);
+                if (distance > range) return best;
+                return !best || distance < best.distance ? { dragon, distance } : best;
+              }, null)?.dragon;
+              if (!target) continue;
+
+              const cadence = Math.max(0.52, 2.55 - castle.level * 0.22 - villageSkills.defense * 0.08);
+              castle.nextDefenseShotAt = elapsed + cadence;
+              const impact = 0.9 + castle.level * 0.38 + villageSkills.defense * 0.16;
+              target.castleDefenseDamage = (target.castleDefenseDamage || 0) + impact;
+              target.fireCooldownUntil = Math.max(target.fireCooldownUntil || 0, elapsed + 0.45);
+              target.bank += (hash(target.id, castle.level, seed) - 0.5) * 0.2;
+              const durability = 7 + (target.generation || 1) * 1.7;
+              if (target.castleDefenseDamage < durability) continue;
+              const dragonId = target.id;
+              if (removeDragon(target)) {
+                announceAttack(`Castle level ${castle.level} archers brought down dragon ${dragonId}`);
+              }
+            }
+          }
+
+          '''
+          text = text[:insert_at] + defense_code + text[insert_at:]
+
+          replace_once(
+              'elapsed += dt;\n  updateTrees(dt);',
+              'elapsed += dt;\n  updateCastlePortcullises(dt);\n  updateTrees(dt);',
+              "portcullis update call",
+          )
+          replace_once(
+              'updateDragons(dt);\n  updateRocs(dt);',
+              'updateDragons(dt);\n  updateCastleDragonDefenses(dt);\n  updateRocs(dt);',
+              "castle defense update call",
+          )
+
+          replace_once(
+              'ui.councilSkills.textContent = `Walls ${villageWallLevel}/7 · Farm ${villageSkills.agriculture} · Machines ${villageSkills.machinery} · Forest ${villageSkills.forestry} · Defense ${villageSkills.defense} · Tree ${youngestTreeLevel}/77`;',
+              'ui.councilSkills.textContent = `Castle ${castles[0]?.level || 0}/7 · Walls ${villageWallLevel}/7 · Farm ${villageSkills.agriculture} · Machines ${villageSkills.machinery} · Forest ${villageSkills.forestry} · Defense ${villageSkills.defense} · Tree ${youngestTreeLevel}/77`;',
+              "castle UI level",
+          )
+
+          replace_once(
+              'ui.finishDetail.textContent = `${formatTime(elapsed)} · castle ${castles.length} · walls level ${villageWallLevel} · ${goldCoins} gold · ${silverCoins} silver · cat ate ${creaturesEatenByCat} creatures`;',
+              'ui.finishDetail.textContent = `${formatTime(elapsed)} · castle level ${castles[0]?.level || 0} · walls level ${villageWallLevel} · ${goldCoins} gold · ${silverCoins} silver · cat ate ${creaturesEatenByCat} creatures`;',
+              "finish castle level",
+          )
+
+          path.write_text(text)
+          PY
+          node --check game.js
+      - name: Commit fortress upgrade
+        shell: bash
+        run: |
+          if git diff --quiet -- game.js; then
+            echo "No game.js changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game.js
+          git commit -m "Build progressive spawn fortress"
+          git push
