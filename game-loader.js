@@ -109,6 +109,9 @@ function patchGameSource(source) {
     : \`Castle Lv \${castleLevelNow + 1}: \${grainStoredKg.toFixed(1)} / \${nextCastleCost.toFixed(1)} grain\`;`,
   );
 
+  if (typeof globalThis.__mowPostPatchGameSource === "function") {
+    source = globalThis.__mowPostPatchGameSource(source);
+  }
   return source;
 }
 
@@ -126,7 +129,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart2-progression1");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart2-progression1-tech2");
 } finally {
   window.fetch = nativeFetch;
 }
