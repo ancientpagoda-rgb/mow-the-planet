@@ -22,64 +22,32 @@
       <canvas id="sim" aria-label="Mow the Planet living world simulation"></canvas>
 
       <header class="hud" aria-label="Mowing statistics">
-        <div class="brand">
-          <span class="brand__eyebrow">MOW THE PLANET</span>
-          <strong>Planet 01</strong>
-        </div>
-        <div class="meter">
-          <span>Harvested</span>
-          <strong id="cut-value">0.0%</strong>
-        </div>
-        <div class="meter meter--battery">
-          <span id="battery-label">Battery</span>
-          <strong id="battery-value">100%</strong>
-        </div>
-        <div class="meter meter--time">
-          <span>Time</span>
-          <strong id="time-value">00:00</strong>
-        </div>
+        <div class="brand"><span class="brand__eyebrow">MOW THE PLANET</span><strong>Planet 01</strong></div>
+        <div class="meter"><span>Harvested</span><strong id="cut-value">0.0%</strong></div>
+        <div class="meter meter--battery"><span id="battery-label">Battery</span><strong id="battery-value">100%</strong></div>
+        <div class="meter meter--time"><span>Time</span><strong id="time-value">00:00</strong></div>
         <button id="auto-toggle" class="auto-button" type="button" aria-pressed="false">Auto</button>
         <button id="sound-toggle" class="icon-button" type="button" aria-label="Toggle mower sound">Sound</button>
       </header>
 
-      <aside class="points-hud" aria-label="Current score">
-        <span>POINTS</span>
-        <strong id="score-value">0</strong>
-      </aside>
-
-      <section class="status-strip" aria-live="polite">
-        <span id="status-value">Auto pilot starting</span>
-        <span id="clippings-value">0 kg harvested · granary 0 kg</span>
-      </section>
+      <aside class="points-hud" aria-label="Current score"><span>POINTS</span><strong id="score-value">0</strong></aside>
+      <section class="status-strip" aria-live="polite"><span id="status-value">Auto pilot starting</span><span id="clippings-value">0 kg harvested · granary 0 kg</span></section>
 
       <aside class="colony-hud" aria-label="Mower colony statistics">
         <div><span>Crew</span><strong id="crew-value">1 / 12</strong></div>
         <div><span>Civilization</span><strong id="generation-value">Mower outpost</strong></div>
         <div><span>Founder</span><strong id="level-value">Lv 1</strong></div>
         <div><span>Threats</span><strong id="threat-value">3 dragons</strong></div>
-        <div class="hatch-meter">
-          <span id="hatch-label">Next hatch · 2.0 kg</span>
-          <i><b id="hatch-progress"></b></i>
-        </div>
-        <div class="council-readout">
-          <span>Village Council · one worker, one vote</span>
-          <strong id="council-status">Saving grain for the first ballot</strong>
-          <small id="council-skills">Farm 0 · Machines 0 · Forest 0 · Defense 0 · Trees 77</small>
-          <small id="council-ballot">Next vote when a proposal is affordable</small>
-        </div>
-        <div class="stronghold-readout">
-          <span>Stronghold stockpiles</span>
-          <strong id="stockpile-status">0.0 grain · 0 timber · 0 stone</strong>
-          <small id="building-status">Houses 0 · Mill 0 · Smithy 0 · Yard 0 · Towers 0</small>
-        </div>
+        <div class="hatch-meter"><span id="hatch-label">Next hatch · 2.0 kg</span><i><b id="hatch-progress"></b></i></div>
+        <div class="council-readout"><span>Village Council · one worker, one vote</span><strong id="council-status">Saving grain for the first ballot</strong><small id="council-skills">Farm 0 · Machines 0 · Forest 0 · Defense 0 · Trees 77</small><small id="council-ballot">Next vote when a proposal is affordable</small></div>
+        <div class="stronghold-readout"><span>Stronghold stockpiles</span><strong id="stockpile-status">0.0 grain · 0 timber · 0 stone</strong><small id="building-status">Houses 0 · Mill 0 · Smithy 0 · Yard 0 · Towers 0</small></div>
       </aside>
 
       <div class="birth-toast" id="birth-toast" role="status" aria-live="polite">New rider hatched</div>
 
       <aside class="planet-tracker" aria-label="Planet mowing progress">
         <div class="planet-globe" id="planet-globe" aria-hidden="true"><span id="granary-dot"></span><span id="barbarian-dot"></span><span id="planet-dot"></span><span id="camera-dot"></span></div>
-        <span id="planet-progress">0.0% of planet</span>
-        <span id="terrain-readout">grassland · 0 m</span>
+        <span id="planet-progress">0.0% of planet</span><span id="terrain-readout">grassland · 0 m</span>
       </aside>
 
       <nav class="zoom-controls" aria-label="Camera controls">
@@ -90,14 +58,8 @@
       </nav>
 
       <section class="touch-controls" aria-label="Mower controls">
-        <div class="steering-controls">
-          <button class="control-button" type="button" data-control="left" aria-label="Steer left">←</button>
-          <button class="control-button" type="button" data-control="right" aria-label="Steer right">→</button>
-        </div>
-        <div class="drive-controls">
-          <button class="control-button control-button--reverse" type="button" data-control="reverse">REV</button>
-          <button class="control-button control-button--go" type="button" data-control="forward">GO</button>
-        </div>
+        <div class="steering-controls"><button class="control-button" type="button" data-control="left" aria-label="Steer left">←</button><button class="control-button" type="button" data-control="right" aria-label="Steer right">→</button></div>
+        <div class="drive-controls"><button class="control-button control-button--reverse" type="button" data-control="reverse">REV</button><button class="control-button control-button--go" type="button" data-control="forward">GO</button></div>
       </section>
 
       <section class="power-controls" aria-label="Power upgrades">
@@ -112,30 +74,19 @@
 
       <section class="modal" id="start-modal" role="dialog" aria-modal="true" aria-labelledby="start-title" aria-hidden="true">
         <div class="modal__card">
-          <p class="modal__eyebrow">A LIVING PLANET SIM</p>
-          <h1 id="start-title">Mow the Planet</h1>
+          <p class="modal__eyebrow">A LIVING PLANET SIM</p><h1 id="start-title">Mow the Planet</h1>
           <p>Grow a democratic farming village inside expanding walls. Harvesters reap fields, planters sow mixed crops, dragons hunt and reproduce, and rocs hunt dragons.</p>
-          <dl class="brief">
-            <div><dt>Target</dt><dd>98.5%</dd></div>
-            <div><dt>Deck</dt><dd>76 cm</dd></div>
-            <div><dt>Job</dt><dd>Whole planet</dd></div>
-          </dl>
+          <dl class="brief"><div><dt>Target</dt><dd>98.5%</dd></div><div><dt>Deck</dt><dd>76 cm</dd></div><div><dt>Job</dt><dd>Whole planet</dd></div></dl>
           <button id="start-button" class="primary-button" type="button">Start engine</button>
           <small>Keyboard: W/A/S/D drive · arrows drive normally and orbit the camera in Planet view · hold Space to drift/e-brake</small>
         </div>
       </section>
 
       <section class="modal" id="finish-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title">
-        <div class="modal__card">
-          <p class="modal__eyebrow">JOB COMPLETE</p>
-          <h2 id="finish-title">Clean enough to stripe.</h2>
-          <div class="finish-score" id="finish-score">$0</div>
-          <p id="finish-detail">The lawn is finished.</p>
-          <button id="new-lawn-button" class="primary-button" type="button">Generate another lawn</button>
-        </div>
+        <div class="modal__card"><p class="modal__eyebrow">JOB COMPLETE</p><h2 id="finish-title">Clean enough to stripe.</h2><div class="finish-score" id="finish-score">$0</div><p id="finish-detail">The lawn is finished.</p><button id="new-lawn-button" class="primary-button" type="button">Generate another lawn</button></div>
       </section>
     </main>
 
-    <script type="module" src="game-entry.js?v=camera-controller2-progression1-starter1-defense1"></script>
+    <script type="module" src="game-entry.js?v=tech-systems2"></script>
   </body>
 </html>
