@@ -14,6 +14,20 @@ function patchGameSource(source) {
     "let running = true;",
   );
   replaceOnce(
+    "earlier resource workers",
+    '  const workerSequence = ["planter", "trimmer", "chainsaw", "bucket", "miner", "mower"];',
+    '  const workerSequence = ["planter", "chainsaw", "miner", "trimmer", "bucket", "mower"];',
+  );
+  replaceOnce(
+    "castle savings priority",
+    "  const affordable = councilProposals().filter(proposalAffordable);",
+    `  const allProposals = councilProposals();
+  const priorityCastle = castles[0]?.level < 4 ? allProposals.find((proposal) => proposal.key === "castle") : null;
+  const affordable = priorityCastle
+    ? (proposalAffordable(priorityCastle) ? [priorityCastle] : [])
+    : allProposals.filter(proposalAffordable);`,
+  );
+  replaceOnce(
     "more world resource nodes",
     "  for (let index = 0; index < 108; index += 1) {",
     "  for (let index = 0; index < 220; index += 1) {",
@@ -89,9 +103,10 @@ function patchGameSource(source) {
   resourceHud.querySelector('[data-resource="silver"]').textContent = silverCoins.toLocaleString();
   resourceHud.querySelector('[data-resource="gold"]').textContent = goldCoins.toLocaleString();
   const castleLevelNow = castles[0]?.level || 0;
+  const nextCastleCost = CASTLE_UPGRADE_COST * Math.max(1, castleLevelNow);
   resourceHud.querySelector('[data-resource="castle-cost"]').textContent = castleLevelNow >= MAX_CASTLE_LEVEL
     ? 'Castle MAX'
-    : \`Next castle level: \${(CASTLE_UPGRADE_COST * Math.max(1, castleLevelNow)).toFixed(1)} grain\`;`,
+    : \`Castle Lv \${castleLevelNow + 1}: \${grainStoredKg.toFixed(1)} / \${nextCastleCost.toFixed(1)} grain\`;`,
   );
 
   return source;
@@ -111,7 +126,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart2");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart2-progression1");
 } finally {
   window.fetch = nativeFetch;
 }
