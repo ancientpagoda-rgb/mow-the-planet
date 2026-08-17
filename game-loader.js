@@ -52,6 +52,32 @@ function patchGameSource(source) {
   castleHud.querySelector("strong").textContent = \`Lv \${castles[0]?.level || 0} / \${MAX_CASTLE_LEVEL}\`;
   ui.threat.textContent =`,
   );
+  replaceOnce(
+    "resource HUD",
+    "  ui.treasury.textContent = `${silverCoins} silver · ${goldCoins} gold`;",
+    `  ui.treasury.textContent = \`${silverCoins} silver · ${goldCoins} gold\`;
+  let resourceHud = document.querySelector("#resource-hud");
+  if (!resourceHud) {
+    resourceHud = document.createElement("aside");
+    resourceHud.id = "resource-hud";
+    resourceHud.className = "resource-hud";
+    resourceHud.setAttribute("aria-label", "Settlement resources");
+    resourceHud.innerHTML = '<span class="resource-hud__title">RESOURCES</span><div class="resource-hud__grid"><div><small>GRAIN</small><strong data-resource="grain">0.0</strong></div><div><small>TIMBER</small><strong data-resource="timber">0.0</strong></div><div><small>STONE</small><strong data-resource="stone">0.0</strong></div><div><small>SILVER</small><strong data-resource="silver">0</strong></div><div><small>GOLD</small><strong data-resource="gold">0</strong></div></div><small class="resource-hud__castle" data-resource="castle-cost"></small>';
+    document.querySelector(".sim-shell")?.append(resourceHud);
+    const resourceHudStyle = document.createElement("style");
+    resourceHudStyle.textContent = '.resource-hud{position:fixed;z-index:8;top:calc(178px + var(--safe-top));right:calc(14px + var(--safe-right));width:260px;padding:8px 10px 9px;border:1px solid rgba(208,160,91,.38);border-radius:13px;background:rgba(11,15,14,.88);box-shadow:0 8px 28px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);pointer-events:none}.resource-hud__title{display:block;margin-bottom:5px;color:var(--amber);font-size:8px;font-weight:900;letter-spacing:.16em;text-align:right}.resource-hud__grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}.resource-hud__grid div{min-width:0;padding:4px 3px;border-radius:7px;background:rgba(255,255,255,.035);text-align:center}.resource-hud__grid small{display:block;color:var(--muted);font-size:6px;font-weight:800;letter-spacing:.06em}.resource-hud__grid strong{display:block;margin-top:1px;color:var(--text-strong);font-size:12px;font-variant-numeric:tabular-nums}.resource-hud__castle{display:block;margin-top:5px;color:var(--jade);font-size:8px;font-weight:750;text-align:right}@media(max-width:700px){.resource-hud{top:calc(162px + var(--safe-top));right:calc(8px + var(--safe-right));width:218px;padding:6px 7px 7px}.resource-hud__grid{gap:2px}.resource-hud__grid small{font-size:5px}.resource-hud__grid strong{font-size:10px}.resource-hud__castle{font-size:7px}}';
+    document.head.append(resourceHudStyle);
+  }
+  resourceHud.querySelector('[data-resource="grain"]').textContent = grainStoredKg.toFixed(1);
+  resourceHud.querySelector('[data-resource="timber"]').textContent = timberStock.toFixed(1);
+  resourceHud.querySelector('[data-resource="stone"]').textContent = stoneStock.toFixed(1);
+  resourceHud.querySelector('[data-resource="silver"]').textContent = silverCoins.toLocaleString();
+  resourceHud.querySelector('[data-resource="gold"]').textContent = goldCoins.toLocaleString();
+  const castleLevelNow = castles[0]?.level || 0;
+  resourceHud.querySelector('[data-resource="castle-cost"]').textContent = castleLevelNow >= MAX_CASTLE_LEVEL
+    ? 'Castle MAX'
+    : \`Next castle level: \${(CASTLE_UPGRADE_COST * Math.max(1, castleLevelNow)).toFixed(1)} grain\`;`,
+  );
 
   return source;
 }
@@ -70,7 +96,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible1");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1");
 } finally {
   window.fetch = nativeFetch;
 }
