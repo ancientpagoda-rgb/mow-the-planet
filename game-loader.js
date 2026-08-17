@@ -70,7 +70,7 @@ function patchGameSource(source) {
   replaceOnce(
     "resource HUD",
     "  ui.treasury.textContent = `${silverCoins} silver · ${goldCoins} gold`;",
-    `  ui.treasury.textContent = \`${silverCoins} silver · ${goldCoins} gold\`;
+    `  ui.treasury.textContent = \`\${silverCoins} silver · \${goldCoins} gold\`;
   let resourceHud = document.querySelector("#resource-hud");
   if (!resourceHud) {
     resourceHud = document.createElement("aside");
@@ -111,7 +111,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart1");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart2");
 } finally {
   window.fetch = nativeFetch;
 }
