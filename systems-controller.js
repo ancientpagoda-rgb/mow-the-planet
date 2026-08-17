@@ -28,10 +28,13 @@ function poll() {
   if (pad) {
     once(pad, 8, openTech);    // Back / Share / Create
     once(pad, 9, togglePause); // Start / Options
+    requestAnimationFrame(poll);
   } else {
     pressed.clear();
+    // No controller connected: avoid burning an extra animation-frame callback
+    // every frame just to discover that nothing changed.
+    setTimeout(poll, 220);
   }
-  requestAnimationFrame(poll);
 }
 
 window.addEventListener("keydown", (event) => {
@@ -47,4 +50,4 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-requestAnimationFrame(poll);
+poll();
