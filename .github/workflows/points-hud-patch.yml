@@ -19,75 +19,25 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
+          import base64
           index = Path('index.html')
           html = index.read_text()
           old_score = '        <div><span>Score</span><strong id="score-value">0</strong></div>\n'
           if old_score not in html:
               raise SystemExit('score block not found')
           html = html.replace(old_score, '', 1)
-
-          marker = '''      </header>\n\n      <section class="status-strip" aria-live="polite">'''
-          points = '''      </header>\n\n      <aside class="points-hud" aria-label="Current score">\n        <span>POINTS</span>\n        <strong id="score-value">0</strong>\n      </aside>\n\n      <section class="status-strip" aria-live="polite">'''
+          marker = '      </header>\n\n      <section class="status-strip" aria-live="polite">'
+          points = '      </header>\n\n      <aside class="points-hud" aria-label="Current score">\n        <span>POINTS</span>\n        <strong id="score-value">0</strong>\n      </aside>\n\n      <section class="status-strip" aria-live="polite">'
           if marker not in html:
               raise SystemExit('header marker not found')
           html = html.replace(marker, points, 1)
           index.write_text(html)
-
           styles = Path('styles.css')
           css = styles.read_text()
           css = css.replace('grid-template-columns: repeat(5, 1fr);', 'grid-template-columns: repeat(4, 1fr);', 1)
-          css += r'''
-
-/* Prominent always-visible score display. */
-.points-hud {
-  position: fixed;
-  z-index: 8;
-  top: calc(76px + var(--safe-top));
-  right: calc(14px + var(--safe-right));
-  min-width: 112px;
-  display: grid;
-  justify-items: end;
-  gap: 1px;
-  padding: 7px 12px 8px;
-  border: 1px solid rgba(208, 160, 91, 0.5);
-  border-radius: 13px;
-  background: rgba(11, 15, 14, 0.88);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32), 0 0 0 2px rgba(208, 160, 91, 0.07);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  pointer-events: none;
-}
-
-.points-hud span {
-  color: var(--amber);
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-}
-
-.points-hud strong {
-  color: var(--text-strong);
-  font-size: 22px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  text-shadow: 0 0 14px rgba(208, 160, 91, 0.25);
-}
-
-@media (max-width: 700px) {
-  .points-hud {
-    top: calc(72px + var(--safe-top));
-    right: calc(8px + var(--safe-right));
-    min-width: 92px;
-    padding: 6px 9px 7px;
-  }
-
-  .points-hud strong { font-size: 18px; }
-}
-'''
+          css += base64.b64decode('Ci8qIFByb21pbmVudCBhbHdheXMtdmlzaWJsZSBzY29yZSBkaXNwbGF5LiAqLwoucG9pbnRzLWh1ZCB7CiAgcG9zaXRpb246IGZpeGVkOwogIHotaW5kZXg6IDg7CiAgdG9wOiBjYWxjKDc2cHggKyB2YXIoLS1zYWZlLXRvcCkpOwogIHJpZ2h0OiBjYWxjKDE0cHggKyB2YXIoLS1zYWZlLXJpZ2h0KSk7CiAgbWluLXdpZHRoOiAxMTJweDsKICBkaXNwbGF5OiBncmlkOwogIGp1c3RpZnktaXRlbXM6IGVuZDsKICBnYXA6IDFweDsKICBwYWRkaW5nOiA3cHggMTJweCA4cHg7CiAgYm9yZGVyOiAxcHggc29saWQgcmdiYSgyMDgsIDE2MCwgOTEsIDAuNSk7CiAgYm9yZGVyLXJhZGl1czogMTNweDsKICBiYWNrZ3JvdW5kOiByZ2JhKDExLCAxNSwgMTQsIDAuODgpOwogIGJveC1zaGFkb3c6IDAgOHB4IDI4cHggcmdiYSgwLCAwLCAwLCAwLjMyKSwgMCAwIDAgMnB4IHJnYmEoMjA4LCAxNjAsIDkxLCAwLjA3KTsKICAtd2Via2l0LWJhY2tkcm9wLWZpbHRlcjogYmx1cigxMnB4KTsKICBiYWNrZHJvcC1maWx0ZXI6IGJsdXIoMTJweCk7CiAgcG9pbnRlci1ldmVudHM6IG5vbmU7Cn0KCi5wb2ludHMtaHVkIHNwYW4gewogIGNvbG9yOiB2YXIoLS1hbWJlcik7CiAgZm9udC1zaXplOiA4cHg7CiAgZm9udC13ZWlnaHQ6IDkwMDsKICBsZXR0ZXItc3BhY2luZzogMC4xNmVtOwp9CgoucG9pbnRzLWh1ZCBzdHJvbmcgewogIGNvbG9yOiB2YXIoLS10ZXh0LXN0cm9uZyk7CiAgZm9udC1zaXplOiAyMnB4OwogIGZvbnQtdmFyaWFudC1udW1lcmljOiB0YWJ1bGFyLW51bXM7CiAgbGluZS1oZWlnaHQ6IDE7CiAgdGV4dC1zaGFkb3c6IDAgMCAxNHB4IHJnYmEoMjA4LCAxNjAsIDkxLCAwLjI1KTsKfQoKQG1lZGlhIChtYXgtd2lkdGg6IDcwMHB4KSB7CiAgLnBvaW50cy1odWQgewogICAgdG9wOiBjYWxjKDcycHggKyB2YXIoLS1zYWZlLXRvcCkpOwogICAgcmlnaHQ6IGNhbGMoOHB4ICsgdmFyKC0tc2FmZS1yaWdodCkpOwogICAgbWluLXdpZHRoOiA5MnB4OwogICAgcGFkZGluZzogNnB4IDlweCA3cHg7CiAgfQoKICAucG9pbnRzLWh1ZCBzdHJvbmcgeyBmb250LXNpemU6IDE4cHg7IH0KfQo=').decode()
           styles.write_text(css)
           PY
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm .github/workflows/points-hud-patch.yml
