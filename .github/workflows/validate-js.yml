@@ -23,6 +23,7 @@ jobs:
           node --check game-loader.js
           node --check game-bootstrap.js
           node --check planet-keyboard-camera.js
+          node --check systems-controller.js
           node --check mower-upgrades.js
           node --check scientific-world.js
           node --check runtime-patches.js
