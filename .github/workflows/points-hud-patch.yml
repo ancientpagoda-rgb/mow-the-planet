@@ -1,0 +1,96 @@
+name: Apply prominent points HUD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/points-hud-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-points-hud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make points obvious
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path('index.html')
+          html = index.read_text()
+          old_score = '        <div><span>Score</span><strong id="score-value">0</strong></div>\n'
+          if old_score not in html:
+              raise SystemExit('score block not found')
+          html = html.replace(old_score, '', 1)
+
+          marker = '''      </header>\n\n      <section class="status-strip" aria-live="polite">'''
+          points = '''      </header>\n\n      <aside class="points-hud" aria-label="Current score">\n        <span>POINTS</span>\n        <strong id="score-value">0</strong>\n      </aside>\n\n      <section class="status-strip" aria-live="polite">'''
+          if marker not in html:
+              raise SystemExit('header marker not found')
+          html = html.replace(marker, points, 1)
+          index.write_text(html)
+
+          styles = Path('styles.css')
+          css = styles.read_text()
+          css = css.replace('grid-template-columns: repeat(5, 1fr);', 'grid-template-columns: repeat(4, 1fr);', 1)
+          css += r'''
+
+/* Prominent always-visible score display. */
+.points-hud {
+  position: fixed;
+  z-index: 8;
+  top: calc(76px + var(--safe-top));
+  right: calc(14px + var(--safe-right));
+  min-width: 112px;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  padding: 7px 12px 8px;
+  border: 1px solid rgba(208, 160, 91, 0.5);
+  border-radius: 13px;
+  background: rgba(11, 15, 14, 0.88);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32), 0 0 0 2px rgba(208, 160, 91, 0.07);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.points-hud span {
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.points-hud strong {
+  color: var(--text-strong);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(208, 160, 91, 0.25);
+}
+
+@media (max-width: 700px) {
+  .points-hud {
+    top: calc(72px + var(--safe-top));
+    right: calc(8px + var(--safe-right));
+    min-width: 92px;
+    padding: 6px 9px 7px;
+  }
+
+  .points-hud strong { font-size: 18px; }
+}
+'''
+          styles.write_text(css)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/points-hud-patch.yml
+          git add index.html styles.css .github/workflows/points-hud-patch.yml
+          git commit -m "Make points score prominent"
+          git push
