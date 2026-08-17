@@ -1,5 +1,5 @@
 // Small pre-bootstrap source patcher. The existing game-bootstrap.js already
-// transforms game.js at runtime; this keeps castle-specific fixes isolated.
+// transforms game.js at runtime; this keeps castle/resource/world fixes isolated.
 const nativeFetch = window.fetch.bind(window);
 
 function patchGameSource(source) {
@@ -8,6 +8,16 @@ function patchGameSource(source) {
     source = source.replace(before, after);
   };
 
+  replaceOnce(
+    "more world resource nodes",
+    "  for (let index = 0; index < 108; index += 1) {",
+    "  for (let index = 0; index < 220; index += 1) {",
+  );
+  replaceOnce(
+    "more stone deposits",
+    "    } else if (choice < 0.82) {",
+    "    } else if (choice < 0.60) {",
+  );
   replaceOnce(
     "free castle function",
     "function foundCastle() {",
@@ -96,7 +106,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1");
 } finally {
   window.fetch = nativeFetch;
 }
