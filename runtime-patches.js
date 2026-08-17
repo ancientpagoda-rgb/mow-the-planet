@@ -19,6 +19,69 @@ export function installRuntimeSourcePatches() {
       "  grainStoredKg = 1.5;\n  grainLoadsDelivered = 0;\n  grainDeliveredKg = 0;\n  timberStock = 2;\n  stoneStock = 2;",
     );
 
+    // Castles now consume the materials their construction visibly implies.
+    // The first upgrade remains reachable with the starter timber/stone cache,
+    // while later rings increasingly depend on the settlement economy.
+    source = source.replace(
+      `function upgradeCastle(castle) {
+  const cost = CASTLE_UPGRADE_COST * castle.level;
+  if (grainStoredKg < cost || castle.level >= MAX_CASTLE_LEVEL) return false;
+  grainStoredKg -= cost;
+  castle.level += 1;
+  castle.collision.r = 9 + castle.level * 0.8;
+  castle.model?.removeFromParent();
+  castle.model?.traverse((object) => {
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose?.());
+    else object.material?.dispose?.();
+  });
+  castle.model = createCastleModel(castle);
+  planetRoot.add(castle.model);
+  castleConstructionCooldownUntil = elapsed + 3.2;
+  announceAttack(\`Castle \${castle.id} upgraded to level \${castle.level} · \${cost.toFixed(1)} kg grain\`);
+  return true;
+}`,
+      `function castleUpgradeResourceCost(castle) {
+  return {
+    cost: CASTLE_UPGRADE_COST * castle.level,
+    timberCost: 0.5 + castle.level * 0.5,
+    stoneCost: 0.75 + castle.level * 0.75,
+  };
+}
+
+function upgradeCastle(castle) {
+  if (castle.level >= MAX_CASTLE_LEVEL) return false;
+  const resources = castleUpgradeResourceCost(castle);
+  if (!spendProposalResources(resources)) return false;
+  castle.level += 1;
+  castle.collision.r = 9 + castle.level * 0.8;
+  castle.model?.removeFromParent();
+  castle.model?.traverse((object) => {
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose?.());
+    else object.material?.dispose?.();
+  });
+  castle.model = createCastleModel(castle);
+  planetRoot.add(castle.model);
+  castleConstructionCooldownUntil = elapsed + 3.2;
+  announceAttack(\`Castle \${castle.id} upgraded to level \${castle.level} · \${strongholdCostText(resources)}\`);
+  return true;
+}`,
+    );
+
+    source = source.replace(
+      `  } else if (castles[0].level < MAX_CASTLE_LEVEL) {
+    const castle = castles[0];
+    const cost = CASTLE_UPGRADE_COST * castle.level;
+    proposals.push({ key: "castle", label: \`Spawn citadel \${castle.level + 1}\`, cost, execute: () => upgradeCastle(castle) });
+  }`,
+      `  } else if (castles[0].level < MAX_CASTLE_LEVEL) {
+    const castle = castles[0];
+    const resources = castleUpgradeResourceCost(castle);
+    proposals.push({ key: "castle", label: \`Spawn citadel \${castle.level + 1}\`, ...resources, execute: () => upgradeCastle(castle) });
+  }`,
+    );
+
     // The spawn castle is a sanctuary rather than decorative scenery.
     source = source.replace(
       `function castleOuterRadiusField(castle) {
