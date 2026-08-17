@@ -4880,6 +4880,10 @@ function init3D() {
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   scene = new THREE.Scene();
+  // Preserve the directional sun for depth, but keep the far hemisphere readable.
+  const globeSkyFill = new THREE.HemisphereLight(0xdcebe3, 0x263b35, 1.35);
+  const globeAmbientFill = new THREE.AmbientLight(0xffffff, 0.38);
+  scene.add(globeSkyFill, globeAmbientFill);
   scene.background = new THREE.Color(0x07100e);
   scene.fog = new THREE.Fog(0x07100e, 1250, 3200);
   planetRoot = new THREE.Group();
