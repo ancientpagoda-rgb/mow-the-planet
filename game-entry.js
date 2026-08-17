@@ -3,7 +3,8 @@ await import("./planet-keyboard-camera.js?v=camera-controller2");
 
 // Technology, autosave, performance controls and post-loader simulation hooks.
 await import("./tech-tree.js?v=tech2");
-await import("./systems-controller.js?v=systems2");
+await import("./systems-controller.js?v=systems3");
+await import("./performance-boost.js?v=perf1");
 
 // Keep the new systems dock above the existing touch/power controls on phones.
 const systemsLayout = document.createElement("style");
