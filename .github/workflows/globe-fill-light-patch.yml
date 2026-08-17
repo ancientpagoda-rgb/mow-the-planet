@@ -1,0 +1,42 @@
+name: Apply globe fill lighting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/globe-fill-light-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-globe-lighting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep far hemisphere readable
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('game.js')
+          text = p.read_text()
+          marker = '  scene = new THREE.Scene();\n'
+          if marker not in text:
+              raise SystemExit('scene initialization marker not found')
+          fill = '''  scene = new THREE.Scene();
+  // Preserve the directional sun for depth, but keep the far hemisphere readable.
+  const globeSkyFill = new THREE.HemisphereLight(0xdcebe3, 0x263b35, 1.35);
+  const globeAmbientFill = new THREE.AmbientLight(0xffffff, 0.38);
+  scene.add(globeSkyFill, globeAmbientFill);
+'''
+          text = text.replace(marker, fill, 1)
+          p.write_text(text)
+          PY
+          node --check game.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/globe-fill-light-patch.yml
+          git add game.js .github/workflows/globe-fill-light-patch.yml
+          git commit -m "Brighten globe shadow side"
+          git push
