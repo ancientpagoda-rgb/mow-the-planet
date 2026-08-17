@@ -9,6 +9,11 @@ function patchGameSource(source) {
   };
 
   replaceOnce(
+    "auto-start simulation",
+    "let running = false;",
+    "let running = true;",
+  );
+  replaceOnce(
     "more world resource nodes",
     "  for (let index = 0; index < 108; index += 1) {",
     "  for (let index = 0; index < 220; index += 1) {",
@@ -106,7 +111,7 @@ window.fetch = async (input, init) => {
 };
 
 try {
-  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1");
+  await import("./game-bootstrap.js?v=dragon-ecology1-castle-visible2-resources1-stones1-autostart1");
 } finally {
   window.fetch = nativeFetch;
 }
