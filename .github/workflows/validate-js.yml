@@ -1,0 +1,32 @@
+name: Validate JavaScript
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check game.js
+          node --check game-entry.js
+          node --check game-loader.js
+          node --check game-bootstrap.js
+          node --check planet-keyboard-camera.js
+          node --check mower-upgrades.js
+          node --check scientific-world.js
+          node --check runtime-patches.js
+          node --check tech-tree.js
+          node --check scripts/validate-source.mjs
+      - name: Validate source-transform markers
+        run: node scripts/validate-source.mjs
