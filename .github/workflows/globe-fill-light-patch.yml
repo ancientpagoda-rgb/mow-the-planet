@@ -24,12 +24,13 @@ jobs:
           marker = '  scene = new THREE.Scene();\n'
           if marker not in text:
               raise SystemExit('scene initialization marker not found')
-          fill = '''  scene = new THREE.Scene();
-  // Preserve the directional sun for depth, but keep the far hemisphere readable.
-  const globeSkyFill = new THREE.HemisphereLight(0xdcebe3, 0x263b35, 1.35);
-  const globeAmbientFill = new THREE.AmbientLight(0xffffff, 0.38);
-  scene.add(globeSkyFill, globeAmbientFill);
-'''
+          fill = (
+              '  scene = new THREE.Scene();\n'
+              '  // Preserve the directional sun for depth, but keep the far hemisphere readable.\n'
+              '  const globeSkyFill = new THREE.HemisphereLight(0xdcebe3, 0x263b35, 1.35);\n'
+              '  const globeAmbientFill = new THREE.AmbientLight(0xffffff, 0.38);\n'
+              '  scene.add(globeSkyFill, globeAmbientFill);\n'
+          )
           text = text.replace(marker, fill, 1)
           p.write_text(text)
           PY
