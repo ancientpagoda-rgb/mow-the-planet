@@ -11,7 +11,9 @@ globalThis.__mowPostPatchGameSource = (input) => {
   const progressionApi = String.raw`
   getProgression() {
     const castle = castles[0] || null;
-    const castleCost = castle ? CASTLE_UPGRADE_COST * castle.level : FIRST_CASTLE_COST;
+    const castleResources = castle && typeof castleUpgradeResourceCost === "function"
+      ? castleUpgradeResourceCost(castle)
+      : { cost: castle ? CASTLE_UPGRADE_COST * castle.level : FIRST_CASTLE_COST, timberCost: 0, stoneCost: 0 };
     const prerequisites = { agriculture: "mill", machinery: "smithy", forestry: "lumberyard", defense: "guardTower" };
     const skills = {};
     for (const key of Object.keys(villageSkills)) {
@@ -26,11 +28,15 @@ globalThis.__mowPostPatchGameSource = (input) => {
     }
     return {
       grain: grainStoredKg,
+      timber: timberStock,
+      stone: stoneStock,
       castle: {
         exists: Boolean(castle),
         level: castle?.level || 0,
         max: MAX_CASTLE_LEVEL,
-        cost: castleCost,
+        cost: castleResources.cost || 0,
+        timberCost: castleResources.timberCost || 0,
+        stoneCost: castleResources.stoneCost || 0,
       },
       skills,
       stronghold: { ...stronghold },
@@ -189,9 +195,12 @@ function renderProgression() {
   castleSummary.textContent = castle.exists ? `Citadel level ${castle.level} / ${castle.max}` : "No castle yet";
   panel.querySelector("#castle-detail").textContent = castleMaxed
     ? "Maximum castle level reached."
-    : `${castle.exists ? `Upgrade to level ${castle.level + 1}` : "Build level 1"} · ${Number(castle.cost).toFixed(1)} kg grain`;
+    : `${castle.exists ? `Upgrade to level ${castle.level + 1}` : "Build level 1"} · ${Number(castle.cost).toFixed(1)} grain · ${Number(castle.timberCost || 0).toFixed(1)} timber · ${Number(castle.stoneCost || 0).toFixed(1)} stone`;
   castleAction.textContent = castleMaxed ? "MAX LEVEL" : castle.exists ? `LEVEL ${castle.level + 1}` : "BUILD CASTLE";
-  castleAction.disabled = castleMaxed || Number(data.grain || 0) < Number(castle.cost || 0);
+  castleAction.disabled = castleMaxed
+    || Number(data.grain || 0) < Number(castle.cost || 0)
+    || Number(data.timber || 0) < Number(castle.timberCost || 0)
+    || Number(data.stone || 0) < Number(castle.stoneCost || 0);
   castleFocus.disabled = !castle.exists;
 
   for (const [key, meta] of Object.entries(SKILL_META)) {
