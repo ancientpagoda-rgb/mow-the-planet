@@ -4,7 +4,8 @@
   "description": "A touch-first living-planet simulation.",
   "main": "game.js",
   "scripts": {
-    "test": "node --check game.js && node scripts/check-heritage.mjs",
+    "test": "node --check game.js && node --check game-entry.js && node --check runtime-install.js && node scripts/check-runtime-foundation.mjs && node scripts/check-heritage.mjs",
+    "check:runtime": "node scripts/check-runtime-foundation.mjs",
     "check:heritage": "node scripts/check-heritage.mjs"
   },
   "keywords": [],
