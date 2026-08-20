@@ -27,7 +27,13 @@ jobs:
           node --check mower-upgrades.js
           node --check scientific-world.js
           node --check runtime-patches.js
+          node --check runtime-install.js
+          node --check runtime/foundation.js
           node --check tech-tree.js
           node --check scripts/validate-source.mjs
+          node --check scripts/check-runtime-foundation.mjs
+          node --check scripts/check-heritage.mjs
+      - name: Test runtime foundation and repository heritage
+        run: npm test
       - name: Validate source-transform markers
         run: node scripts/validate-source.mjs
