@@ -47,4 +47,24 @@ assert.equal(runtime.version, 1);
 assert.equal(runtime.random.seed, runtime.seed);
 assert.equal(runtime.world.id, "mow-main");
 
-console.log("Runtime foundation OK: deterministic named streams, fixed-step clock, and single-world contract validated.");
+const { patchRuntimeCoreSource } = await import("../runtime-install.js");
+const syntheticCore = `let previous = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - previous) / 1000 || 0);
+  previous = now;
+  update(dt * SIMULATION_SPEED * Math.max(0, globalThis.__mowTimeScale ?? 1));
+  draw(dt);
+  updateAdaptiveQuality(dt);
+  requestAnimationFrame(frame);
+}`;
+const patchedCore = patchRuntimeCoreSource(syntheticCore);
+assert.match(patchedCore, /bindSnapshotProvider/, "live source patch must expose the authoritative world snapshot");
+assert.match(patchedCore, /authoritativeClock\.advance/, "live source patch must route updates through the fixed-step clock");
+assert.match(patchedCore, /for \(let runtimeStep = 0; runtimeStep < tick\.steps;/, "fixed-step integration must execute every accumulated step");
+assert.doesNotMatch(
+  patchedCore,
+  /update\(dt \* SIMULATION_SPEED \* Math\.max\(0, globalThis\.__mowTimeScale \?\? 1\)\);/,
+  "variable-step update must be removed when the clock patch applies",
+);
+
+console.log("Runtime foundation OK: deterministic streams, fixed-step clock, single-world contract, and live source integration validated.");
