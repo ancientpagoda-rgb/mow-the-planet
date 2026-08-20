@@ -103,6 +103,13 @@ function patchFixedStepClock(source) {
   return source.replace(updateLine, replacement);
 }
 
+export function patchRuntimeCoreSource(input) {
+  let source = String(input);
+  source = patchWorldContract(source);
+  source = patchFixedStepClock(source);
+  return source;
+}
+
 let hooksInstalled = false;
 
 export function installRuntimeFoundationHooks() {
@@ -111,10 +118,8 @@ export function installRuntimeFoundationHooks() {
 
   const previousPostPatch = globalThis.__mowPostPatchGameSource;
   globalThis.__mowPostPatchGameSource = (input) => {
-    let source = typeof previousPostPatch === "function" ? previousPostPatch(input) : input;
-    source = patchWorldContract(source);
-    source = patchFixedStepClock(source);
-    return source;
+    const source = typeof previousPostPatch === "function" ? previousPostPatch(input) : input;
+    return patchRuntimeCoreSource(source);
   };
 
   return runtimeFoundation;
