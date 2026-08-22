@@ -8,6 +8,7 @@ await import("./progression-ui.js?v=progression-ui1");
 await import("./controller-drive.js?v=analog1");
 await import("./systems-controller.js?v=systems3");
 await import("./performance-boost.js?v=perf1");
+await import("./points-fix.js?v=points2");
 
 // Keep the new systems dock above the existing touch/power controls on phones.
 const systemsLayout = document.createElement("style");
@@ -19,7 +20,7 @@ const { installRuntimeSourcePatches } = await import("./runtime-patches.js?v=def
 const restoreFetch = installRuntimeSourcePatches();
 
 try {
-  await import("./game-loader.js?v=castle-visible2-resources1-stones1-autostart2-progression2-tech3-controller1-camera4");
+  await import("./game-loader.js?v=castle-visible2-resources1-stones1-autostart2-progression2-tech3-controller1-camera4-points2");
 } finally {
   restoreFetch();
 }
