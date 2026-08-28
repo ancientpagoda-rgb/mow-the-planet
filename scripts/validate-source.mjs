@@ -49,6 +49,8 @@ requireText(entry, "runtime patch module", "./runtime-patches.js");
 if (entry.includes("points-fix.js")) throw new Error("points scoring must come from game.js, not a runtime source patch");
 requireText(tech, "runtime API", "globalThis.__mowRuntime");
 requireText(tech, "technology effects", "globalThis.__mowTechEffects");
+requireText(tech, "points ledger snapshot", "version: 3, savedAt: Date.now(), seed, elapsed, cutCount, grainDeliveredKg");
+requireText(tech, "legacy points migration", "upgradeSpent = legacyScoreSave ? 0");
 requireText(patches, "sanctuary function", "castleProtectsAgent");
 
 console.log("Source transform markers validated.");
