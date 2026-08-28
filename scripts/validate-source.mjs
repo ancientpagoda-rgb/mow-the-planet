@@ -31,6 +31,8 @@ for (const [label, text] of [
   ["stone yield", "const stoneYield = 1 + villageSkills.machinery * 0.12;"],
   ["worker speed", "return permanentGain * temporaryBoost * (1 + villageSkills.machinery * 0.06) * (1 + stronghold.smithy * 0.05);"],
   ["crop growth", "const cropSpeed = 1 + villageSkills.agriculture * 0.12;"],
+  ["crop harvest points", "harvestedCropCells += 1;\n        // Mature crops are productive harvesting too. Keep them in the\n        // lifetime work total so every completed harvest earns points.\n        cutCount += 1;"],
+  ["spendable points", "return Math.max(0, earnedPoints() - upgradeSpent);"],
   ["reproduction", "if (parent.reproductionProgress < REPRODUCTION_CELLS) continue;"],
   ["capacity", "return Math.min(MAX_COLONY, BASE_COLONY_CAP + stronghold.housing + (stronghold.housing >= MAX_STRONGHOLD_LEVEL ? 1 : 0));"],
   ["council cadence", "nextCouncilAt = elapsed + COUNCIL_INTERVAL;"],
@@ -44,6 +46,7 @@ requireText(loader, "post-patch hook", "__mowPostPatchGameSource");
 requireText(loader, "resource worker sequence", '["planter", "chainsaw", "miner", "trimmer", "bucket", "mower"]');
 requireText(entry, "technology import", "./tech-tree.js");
 requireText(entry, "runtime patch module", "./runtime-patches.js");
+if (entry.includes("points-fix.js")) throw new Error("points scoring must come from game.js, not a runtime source patch");
 requireText(tech, "runtime API", "globalThis.__mowRuntime");
 requireText(tech, "technology effects", "globalThis.__mowTechEffects");
 requireText(patches, "sanctuary function", "castleProtectsAgent");

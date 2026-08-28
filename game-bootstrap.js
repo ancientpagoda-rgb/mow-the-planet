@@ -3,7 +3,7 @@ import { MOWER_UPGRADE_MAX, MOWER_UPGRADE_SPECS } from "./mower-upgrades.js";
 // Load the camera helper before the main game so it can capture OrbitControls.
 await import("./planet-keyboard-camera.js?v=planet-arrows1");
 
-const coreUrl = new URL("./game.js?v=founder-upgrades1", import.meta.url);
+const coreUrl = new URL("./game.js?v=founder-upgrades1-points3", import.meta.url);
 const scientificWorldUrl = new URL("./scientific-world.js", import.meta.url).href;
 const response = await fetch(coreUrl, { cache: "no-cache" });
 if (!response.ok) throw new Error(`Unable to load game core (${response.status})`);
