@@ -1528,6 +1528,9 @@ function cutGrass(mowingAgent = mower, emitParticles = true) {
         cropStage[index] = 0;
         cropType[index] = 0;
         harvestedCropCells += 1;
+        // Mature crops are productive harvesting too. Keep them in the
+        // lifetime work total so every completed harvest earns points.
+        cutCount += 1;
         unplantedHarvestCells.push(index);
         renderGrassCell(col, row, true);
         continue;
@@ -3067,13 +3070,19 @@ function updateApexCat(dt) {
   }
 }
 
-function liveScore() {
+function earnedPoints() {
   const castleScore = castles.reduce((total, castle) => total + castle.level * 2200, 0);
   const wallScore = villageWallLevel * 1900;
   const skillScore = Object.values(villageSkills).reduce((total, level) => total + level * 1750, 0);
   const treasuryScore = silverCoins * 25 + goldCoins * 3000;
   const strongholdScore = Object.values(stronghold).reduce((total, level) => total + level * 2400, 0) + timberStock * 120 + stoneStock * 180;
-  return Math.max(0, Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + strongholdScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + treesTrimmed * 180 + offspring.length * 1500 - damage * 250 - mowersLost * 1000 - upgradeSpent));
+  return Math.round(cutCount * 10 + grainDeliveredKg * 250 + castleScore + wallScore + skillScore + strongholdScore + treasuryScore + dragonsTakenByRocs * 1800 + treesCut * 400 + treesTrimmed * 180 + offspring.length * 1500);
+}
+
+function liveScore() {
+  // The HUD is a spendable points balance. Damage and mower losses belong in
+  // the final performance score; they must not silently erase earned currency.
+  return Math.max(0, earnedPoints() - upgradeSpent);
 }
 
 function upgradeFounderToTractor() {
