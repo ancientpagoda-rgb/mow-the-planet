@@ -8,6 +8,12 @@
     <meta name="description" content="Mow the Planet — grow a farming village across a living spherical wilderness of dragons, rocs, and impossible terrain." />
     <title>Mow the Planet — A Living Planet Sim</title>
     <link rel="stylesheet" href="styles.css" />
+    <style id="clean-world-view">
+      /* Presentation-only clean mode: keep all simulation/UI logic alive, but render only the world canvas. */
+      body > :not(.sim-shell) { display: none !important; }
+      .sim-shell > :not(#sim) { display: none !important; }
+      #sim { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+    </style>
     <script type="importmap">
       {
         "imports": {
