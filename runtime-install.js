@@ -10,6 +10,7 @@ const diagnostics = globalThis.__mowRuntimeFoundationDiagnostics ||= {
   version: runtimeFoundation.version,
   clockPatched: false,
   worldPatched: false,
+  civilianSpawnPatched: false,
   warnings: [],
 };
 
@@ -75,6 +76,44 @@ if (mowAuthoritativeWorld && !mowAuthoritativeWorld.isBound()) {
   return source.replace(anchor, `${binding}\n\n${anchor}`);
 }
 
+function patchCivilianCastleSpawns(source) {
+  const spawnAnchor = `  let spawnX = parent.x;\n  let spawnY = parent.y;\n  for (let attempt = 0; attempt < 12; attempt += 1) {\n    const angle = parent.angle + Math.PI * (0.45 + attempt * 0.37);\n    const distance = 18 + attempt * 2;\n    const candidateX = wrapX(parent.x + Math.cos(angle) * distance);\n    const candidateY = Math.max(clearance, Math.min(FIELD_H - clearance, parent.y + Math.sin(angle) * distance));\n    if (!pointIsBlocked(candidateX, candidateY, clearance)) {\n      spawnX = candidateX;\n      spawnY = candidateY;\n      break;\n    }\n  }`;
+
+  if (!source.includes(spawnAnchor)) {
+    warn("civilian-spawn anchor not found; workers will keep spawning near their parent");
+    return source;
+  }
+
+  const castleSpawn = String.raw`  const spawnHome = castles[0] || granary;
+  let spawnX = spawnHome.x;
+  let spawnY = spawnHome.y;
+  const spawnBaseAngle = ((childId * 2.399963229728653) + parent.id * 0.173) % (Math.PI * 2);
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const slot = attempt % 12;
+    const ring = Math.floor(attempt / 12);
+    const angle = spawnBaseAngle + (slot / 12) * Math.PI * 2 + ring * 0.17;
+    const distance = 36 + ring * 18;
+    const candidateX = wrapX(spawnHome.x + Math.cos(angle) * distance);
+    const candidateY = Math.max(clearance, Math.min(FIELD_H - clearance, spawnHome.y + Math.sin(angle) * distance));
+    if (!pointIsBlocked(candidateX, candidateY, clearance)) {
+      spawnX = candidateX;
+      spawnY = candidateY;
+      break;
+    }
+  }`;
+
+  let patched = source.replace(spawnAnchor, castleSpawn);
+  const angleAnchor = "    angle: parent.angle + Math.PI * 0.62,";
+  if (patched.includes(angleAnchor)) {
+    patched = patched.replace(
+      angleAnchor,
+      "    angle: Math.atan2(spawnY - spawnHome.y, worldDeltaX(spawnX, spawnHome.x)),",
+    );
+  }
+  diagnostics.civilianSpawnPatched = true;
+  return patched;
+}
+
 function patchFixedStepClock(source) {
   const frameHeader = `let previous = performance.now();\nfunction frame(now) {\n  const dt = Math.min(0.033, (now - previous) / 1000 || 0);\n  previous = now;`;
   if (!source.includes(frameHeader)) {
@@ -106,6 +145,7 @@ function patchFixedStepClock(source) {
 export function patchRuntimeCoreSource(input) {
   let source = String(input);
   source = patchWorldContract(source);
+  source = patchCivilianCastleSpawns(source);
   source = patchFixedStepClock(source);
   return source;
 }
