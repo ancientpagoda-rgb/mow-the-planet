@@ -23,7 +23,7 @@ async function loadOptional(specifier, label) {
 
 // Install the shared deterministic runtime object early, but delay its source
 // hook until the existing tech/progression hooks have registered.
-const foundationModule = await loadOptional("./runtime-install.js?v=foundation1", "runtime foundation");
+const foundationModule = await loadOptional("./runtime-install.js?v=foundation2", "runtime foundation");
 
 // Input/camera enhancements are optional: base OrbitControls must still boot if
 // an enhancement regresses on a particular browser/device.
@@ -64,7 +64,7 @@ try {
 }
 
 try {
-  await import("./game-loader.js?v=castle-visible2-resources1-stones1-autostart2-progression2-tech3-controller1-camera4-points4-foundation1");
+  await import("./game-loader.js?v=castle-visible2-resources1-stones1-autostart2-progression2-tech3-controller1-camera4-points4-foundation2");
   bootDiagnostics.state = "running";
   bootDiagnostics.completedAt = Date.now();
 } catch (error) {
